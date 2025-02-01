@@ -25,9 +25,9 @@ func GetNotifications(c *gin.Context) {
 
 	var notifications []models.Notification
 	err := database.DB.
-		Preload("Forum").
-		Preload("Comment.User").
-		Preload("Reply.User").
+		Preload("Comment.User").  // Preload User untuk Comment
+		Preload("Reply.User").    // Preload User untuk Reply
+		Preload("Forum").         // Preload Forum
 		Where("user_id = ?", userData.ID).
 		Order("created_at DESC").
 		Find(&notifications).Error
@@ -39,25 +39,13 @@ func GetNotifications(c *gin.Context) {
 	var result []gin.H
 	for _, notif := range notifications {
 		notificationData := gin.H{
-			"id":      notif.ID,
-			"content": notif.Content,
-			"isRead":  notif.IsRead,
+			"id":         notif.ID,
+			"content":    notif.Content,
+			"isRead":     notif.IsRead,
+			"created_at": notif.CreatedAt,
 		}
-
-		if notif.Comment != nil {
-			notificationData["comment_id"] = notif.Comment.ID
-			notificationData["comment"] = notif.Comment.Content
-			notificationData["user"] = notif.Comment.User.Username
-			notificationData["profile"] = notif.Comment.User.Profile
-			notificationData["relative_time"] = utils.TimeAgo(notif.Comment.CreatedAt)
-		} else {
-			notificationData["comment_id"] = nil
-			notificationData["comment"] = nil
-			notificationData["user"] = nil
-			notificationData["profile"] = nil
-			notificationData["relative_time"] = nil
-		}
-
+	
+		// Handle Forum
 		if notif.Forum != nil {
 			notificationData["forum_id"] = notif.Forum.ID
 			notificationData["forum_title"] = notif.Forum.Title
@@ -65,27 +53,45 @@ func GetNotifications(c *gin.Context) {
 			notificationData["forum_relative_time"] = utils.TimeAgo(notif.Forum.CreatedAt)
 		} else {
 			notificationData["forum_id"] = nil
-			notificationData["forum_title"] = nil
-			notificationData["photo"] = nil
-			notificationData["forum_relative_time"] = nil
+			notificationData["forum_title"] = ""
+			notificationData["photo"] = ""
+			notificationData["forum_relative_time"] = ""
 		}
-
+	
+		// Handle Comment & Reply
 		if notif.Reply != nil {
+			// Jika ini adalah notifikasi balasan komentar
 			notificationData["reply_id"] = notif.Reply.ID
 			notificationData["reply"] = notif.Reply.Content
 			notificationData["reply_user"] = notif.Reply.User.Username
 			notificationData["reply_profile"] = notif.Reply.User.Profile
 			notificationData["reply_relative_time"] = utils.TimeAgo(notif.Reply.CreatedAt)
-		} else {
+	
+			// Kosongkan data komentar karena ini balasan, bukan komentar utama
+			notificationData["comment_id"] = nil
+			notificationData["comment"] = ""
+			notificationData["user"] = ""
+			notificationData["profile"] = ""
+			notificationData["relative_time"] = ""
+		} else if notif.Comment != nil {
+			// Jika ini adalah notifikasi komentar biasa
+			notificationData["comment_id"] = notif.Comment.ID
+			notificationData["comment"] = notif.Comment.Content
+			notificationData["user"] = notif.Comment.User.Username
+			notificationData["profile"] = notif.Comment.User.Profile
+			notificationData["relative_time"] = utils.TimeAgo(notif.Comment.CreatedAt)
+	
+			// Kosongkan data balasan karena ini komentar utama, bukan balasan
 			notificationData["reply_id"] = nil
-			notificationData["reply"] = nil
-			notificationData["reply_user"] = nil
-			notificationData["reply_profile"] = nil
-			notificationData["reply_relative_time"] = nil
+			notificationData["reply"] = ""
+			notificationData["reply_user"] = ""
+			notificationData["reply_profile"] = ""
+			notificationData["reply_relative_time"] = ""
 		}
-
+	
 		result = append(result, notificationData)
 	}
+	
 
 	c.JSON(http.StatusOK, gin.H{
 		"notifications": result,

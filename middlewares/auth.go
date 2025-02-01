@@ -19,7 +19,6 @@ var jwtSecret = []byte(os.Getenv("rahasia"))
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Ambil header Authorization
 		authHeader := c.GetHeader("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing or invalid Authorization header"})
@@ -30,7 +29,6 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		fmt.Println("Token received:", tokenString)
 
-		// Parsing token JWT
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -53,7 +51,6 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		fmt.Println("Token claims:", claims)
 
-		// Ambil userID dari claims
 		id, ok := claims["id"].(float64)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
@@ -63,7 +60,6 @@ func AuthMiddleware() gin.HandlerFunc {
 		userID := uint(id)
 
 		var user models.User
-		// Query database untuk user berdasarkan userID
 		if err := database.DB.First(&user, userID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
@@ -74,7 +70,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Set user ID ke dalam konteks dengan key yang konsisten
 		c.Set("userID", user.ID)
 		c.Set("user", user)
 		c.Next()

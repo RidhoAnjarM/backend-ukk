@@ -62,7 +62,7 @@ func Login(c *gin.Context) {
 func Register(c *gin.Context) {
 	var input models.User
 
-	// Ambil data form secara manual
+	input.Name = c.PostForm("name")
 	input.Username = c.PostForm("username")
 	input.Password = c.PostForm("password")
 	input.Role = c.PostForm("role")
@@ -78,6 +78,10 @@ func Register(c *gin.Context) {
 	if input.Username == "" || input.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username dan password harus diisi"})
 		return
+	}
+
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Nama harus diisi"})
 	}
 
 	var existingUser models.User
@@ -114,6 +118,7 @@ func Register(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "User berhasil dibuat",
+		"name":     input.Name,
 		"username": input.Username,
 		"profile":  input.Profile,
 		"role":     input.Role,

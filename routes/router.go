@@ -54,5 +54,10 @@ func SetupRouter(r *gin.Engine) {
 			notification.DELETE("/:id", middlewares.AuthMiddleware(), controllers.DeleteNotification)
 			notification.DELETE("/all", middlewares.AuthMiddleware(), controllers.DeleteAllNotifications)
 		}
+
+		profile := api.Group("/profil")
+		{
+			profile.GET("/", middlewares.AuthMiddleware(), controllers.GetProfile)
+		}
 	}
 }

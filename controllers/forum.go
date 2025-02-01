@@ -18,7 +18,6 @@ import (
 func CreateForum(c *gin.Context) {
     var forum models.Forum
 
-    // Validasi user
     user, exists := c.Get("user")
     if !exists {
         c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -33,7 +32,6 @@ func CreateForum(c *gin.Context) {
 
     forum.UserID = uint(userData.ID)
 
-    // Upload file photo
     file, err := c.FormFile("photo")
     if err != nil {
         forum.Photo = ""
@@ -46,14 +44,12 @@ func CreateForum(c *gin.Context) {
         forum.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
     }
 
-    // Validasi title
     forum.Title = c.PostForm("title")
     if forum.Title == "" {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
         return
     }
 
-    // Validasi category_id (opsional)
     categoryIDStr := c.PostForm("category_id")
     if categoryIDStr != "" {
 		categoryID, err := strconv.Atoi(categoryIDStr)
@@ -62,7 +58,6 @@ func CreateForum(c *gin.Context) {
 			return
 		}
 	
-		// Periksa apakah category_id valid di database
 		var category models.Category
 		if err := database.DB.First(&category, categoryID).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
@@ -71,17 +66,15 @@ func CreateForum(c *gin.Context) {
 	
 		forum.CategoryID = &category.ID
 	} else {
-		forum.CategoryID = nil // Jika tidak diisi, set ke NULL
+		forum.CategoryID = nil 
 	}
 	
 
-    // Simpan forum ke database
     if err := database.DB.Create(&forum).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum", "details": err.Error()})
         return
     }
 
-    // Load data forum dengan relasi
     database.DB.Preload("User").Preload("Category").First(&forum, forum.ID)
 
     response := models.ForumCreateResponse{

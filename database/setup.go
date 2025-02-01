@@ -46,12 +46,10 @@ func ConnectDatabase() {
 }
 
 func safeAutoMigrate(db *gorm.DB, models ...interface{}) {
-	for _, model := range models {
-		if !db.Migrator().HasTable(model) {
-			err := db.AutoMigrate(model)
-			if err != nil {
-				log.Fatalf("Failed to migrate table for model %T: %v", model, err)
-			}
-		}
-	}
+    for _, model := range models {
+        err := db.AutoMigrate(model)
+        if err != nil {
+            log.Fatalf("Failed to migrate table for model %T: %v", model, err)
+        }
+    }
 }
