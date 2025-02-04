@@ -19,17 +19,17 @@ type Category struct {
 	Name string `json:"name"`
 }
 type User struct {
-    ID            uint           `gorm:"primarykey" json:"id"`
-    Name          string         `json:"name"`
-    Username      string         `gorm:"unique;not null" form:"username" json:"username"`
-    Password      string         `form:"password" json:"password"`
-    Profile       string         `form:"profile" json:"profile"`
-    Role          string         `form:"role" json:"role"`
-    Status        string         `form:"status" json:"status"`
-    SuspendUntil  *time.Time     `form:"suspend_until" json:"suspend_until,omitempty"`
-    Notifications []Notification `json:"notifications" gorm:"foreignKey:UserID"`
-    Forums        []Forum        `json:"forums" gorm:"foreignKey:UserID"` 
-    CreatedAt     time.Time      `json:"created_at"`
+	ID            uint           `gorm:"primarykey" json:"id"`
+	Name          string         `json:"name"`
+	Username      string         `gorm:"unique;not null" form:"username" json:"username"`
+	Password      string         `form:"password" json:"password"`
+	Profile       string         `form:"profile" json:"profile"`
+	Role          string         `form:"role" json:"role"`
+	Status        string         `form:"status" json:"status"`
+	SuspendUntil  *time.Time     `form:"suspend_until" json:"suspend_until,omitempty"`
+	Notifications []Notification `json:"notifications" gorm:"foreignKey:UserID"`
+	Forums        []Forum        `json:"forums" gorm:"foreignKey:UserID"`
+	CreatedAt     time.Time      `json:"created_at"`
 }
 
 type Notification struct {
@@ -41,9 +41,9 @@ type Notification struct {
 	IsRead    bool      `json:"is_read"`
 	ForumID   uint      `json:"forum_id"`
 	CreatedAt time.Time `json:"created_at"`
-	Comment *Comment `json:"comment,omitempty" gorm:"foreignKey:CommentID;references:ID"`
-	Reply   *Reply   `json:"reply,omitempty" gorm:"foreignKey:ReplyID;references:ID"`
-	Forum   *Forum   `json:"forum,omitempty" gorm:"foreignKey:ForumID;references:ID"`
+	Comment   *Comment  `json:"comment,omitempty" gorm:"foreignKey:CommentID;references:ID"`
+	Reply     *Reply    `json:"reply,omitempty" gorm:"foreignKey:ReplyID;references:ID"`
+	Forum     *Forum    `json:"forum,omitempty" gorm:"foreignKey:ForumID;references:ID"`
 }
 
 type Comment struct {
@@ -71,7 +71,7 @@ type Reply struct {
 type Like struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	UserID    uint      `json:"user_id"`
-	ForumID   *uint     `json:"forum_id,omitempty"`  
+	ForumID   *uint     `json:"forum_id,omitempty"`
 	CommentID *uint     `json:"comment_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }

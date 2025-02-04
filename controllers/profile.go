@@ -40,7 +40,7 @@ func GetProfile(c *gin.Context) {
         "status":        userWithForums.Status,
         "suspend_until": userWithForums.SuspendUntil,
         "created_at":    userWithForums.CreatedAt,
-        "forums":        userWithForums.Forums, // Menampilkan forum yang dibuat oleh user
+        "forums":        userWithForums.Forums, 
     }
 
     c.JSON(http.StatusOK, gin.H{
