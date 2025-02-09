@@ -123,13 +123,11 @@ func GetCommentByID(c *gin.Context) {
 	commentID := c.Param("id")
 
 	var comment models.Comment
-	// Menggunakan Preload untuk load data User dan Replies
 	if err := database.DB.Preload("User").Preload("Replies.User").First(&comment, commentID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Comment not found"})
 		return
 	}
 
-	// Menyusun data komentar dan reply-nya
 	replies := []gin.H{}
 	for _, reply := range comment.Replies {
 		replies = append(replies, gin.H{
@@ -188,4 +186,38 @@ func DeleteComment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Comment deleted successfully"})
+}
+
+func DeleteReply(c *gin.Context) {
+	replyID := c.Param("id")
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	userData, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user data"})
+		return
+	}
+
+	var reply models.Reply
+	if err := database.DB.First(&reply, replyID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Reply not found"})
+		return
+	}
+
+	if reply.UserID != userData.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You can only delete your own replies"})
+		return
+	}
+
+	if err := database.DB.Delete(&reply).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete reply", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Reply deleted successfully"})
 }

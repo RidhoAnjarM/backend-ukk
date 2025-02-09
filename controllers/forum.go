@@ -16,93 +16,89 @@ import (
 )
 
 func CreateForum(c *gin.Context) {
-    var forum models.Forum
+	var forum models.Forum
 
-    user, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    userData, ok := user.(models.User)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "User data is invalid"})
-        return
-    }
+	userData, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User data is invalid"})
+		return
+	}
 
-    forum.UserID = uint(userData.ID)
+	forum.UserID = uint(userData.ID)
 
-    file, err := c.FormFile("photo")
-    if err != nil {
-        forum.Photo = ""
-    } else {
-        uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
-        if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
-            os.MkdirAll("./uploads", os.ModePerm)
-        }
-        c.SaveUploadedFile(file, uploadPath)
-        forum.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
-    }
+	file, err := c.FormFile("photo")
+	if err != nil {
+		forum.Photo = ""
+	} else {
+		uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
+		if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
+			os.MkdirAll("./uploads", os.ModePerm)
+		}
+		c.SaveUploadedFile(file, uploadPath)
+		forum.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
+	}
 
-    forum.Title = c.PostForm("title")
-    if forum.Title == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
-        return
-    }
+	forum.Title = c.PostForm("title")
+	if forum.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
+		return
+	}
 
-    categoryIDStr := c.PostForm("category_id")
-    if categoryIDStr != "" {
+	categoryIDStr := c.PostForm("category_id")
+	if categoryIDStr != "" {
 		categoryID, err := strconv.Atoi(categoryIDStr)
 		if err != nil || categoryID <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Category ID"})
 			return
 		}
-	
+
 		var category models.Category
 		if err := database.DB.First(&category, categoryID).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
 			return
 		}
-	
+
 		forum.CategoryID = &category.ID
 	} else {
-		forum.CategoryID = nil 
+		forum.CategoryID = nil
 	}
-	
 
-    if err := database.DB.Create(&forum).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum", "details": err.Error()})
-        return
-    }
+	if err := database.DB.Create(&forum).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum", "details": err.Error()})
+		return
+	}
 
-    database.DB.Preload("User").Preload("Category").First(&forum, forum.ID)
+	database.DB.Preload("User").Preload("Category").First(&forum, forum.ID)
 
-    response := models.ForumCreateResponse{
-        ID:           uint(forum.ID),
-        Title:        forum.Title,
-        Photo:        forum.Photo,
-        Username:     forum.User.Username,
-        CategoryName: forum.Category.Name,
-        CreatedAt:    forum.CreatedAt.Format("2006-01-02 15:04:05"),
-        RelativeTime: utils.TimeAgo(forum.CreatedAt),
-    }
+	response := models.ForumCreateResponse{
+		ID:           uint(forum.ID),
+		Title:        forum.Title,
+		Photo:        forum.Photo,
+		Username:     forum.User.Username,
+		CategoryName: forum.Category.Name,
+		CreatedAt:    forum.CreatedAt.Format("2006-01-02 15:04:05"),
+		RelativeTime: utils.TimeAgo(forum.CreatedAt),
+	}
 
-    c.JSON(http.StatusCreated, gin.H{
-        "message": "Forum created successfully",
-        "forum":   response,
-    })
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Forum created successfully",
+		"forum":   response,
+	})
 }
-
 
 func GetAllForums(c *gin.Context) {
 	var forums []models.Forum
-	// Preload user, category, comments, dan replies beserta user yang membuat komentar dan reply
 	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Order("created_at desc").Find(&forums).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forums"})
 		return
 	}
 
-	// Shuffle the forums except the latest ones
 	if len(forums) > 1 {
 		latestForum := forums[0]
 		remainingForums := forums[1:]
@@ -115,48 +111,47 @@ func GetAllForums(c *gin.Context) {
 
 	var response []gin.H
 	for _, forum := range forums {
-		// Membuat daftar komentar dengan reply
 		var comments []gin.H
 		for _, comment := range forum.Comments {
-			// Menyusun daftar reply untuk komentar ini
 			var replies []gin.H
 			for _, reply := range comment.Replies {
 				replies = append(replies, gin.H{
-					"id":           reply.ID,
-					"content":      reply.Content,
-					"user_id":      reply.UserID,
-					"username":     reply.User.Username,
-					"profile":      reply.User.Profile,
-					"created_at":   reply.CreatedAt.Format("2006-01-02 15:04:05"),
+					"id":            reply.ID,
+					"content":       reply.Content,
+					"user_id":       reply.UserID,
+					"username":      reply.User.Username,
+					"name":          reply.User.Name,
+					"profile":       reply.User.Profile,
+					"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
 					"relative_time": utils.TimeAgo(reply.CreatedAt),
 				})
 			}
 
-			// Menyusun data komentar beserta reply-nya
 			comments = append(comments, gin.H{
 				"id":            comment.ID,
 				"content":       comment.Content,
 				"user_id":       comment.UserID,
 				"username":      comment.User.Username,
+				"name":          comment.User.Name,
 				"profile":       comment.User.Profile,
 				"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
 				"relative_time": utils.TimeAgo(comment.CreatedAt),
-				"replies":       replies,  // Menambahkan reply pada komentar
+				"replies":       replies,
 			})
 		}
 
-		// Menyusun data forum
 		response = append(response, gin.H{
 			"id":            forum.ID,
 			"title":         forum.Title,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
+			"name":          forum.User.Name,
 			"profile":       forum.User.Profile,
 			"category_id":   forum.CategoryID,
 			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
-			"comments":      comments,  // Menambahkan komentar beserta reply-nya
+			"comments":      comments,
 		})
 	}
 
@@ -167,39 +162,37 @@ func GetForumByID(c *gin.Context) {
 	id := c.Param("id")
 	var forum models.Forum
 
-	// Preload user, category, comments, dan replies beserta user yang membuat komentar dan reply
 	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").First(&forum, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Forum not found"})
 		return
 	}
 
-	// Membuat daftar komentar dengan reply
 	var comments []gin.H
 	for _, comment := range forum.Comments {
-		// Menyusun daftar reply untuk komentar ini
 		var replies []gin.H
 		for _, reply := range comment.Replies {
 			replies = append(replies, gin.H{
-				"id":        reply.ID,
-				"content":   reply.Content,
-				"user_id":   reply.UserID,
-				"username":  reply.User.Username,
-				"profile":   reply.User.Profile,
-				"created_at": reply.CreatedAt.Format("2006-01-02 15:04:05"),
+				"id":            reply.ID,
+				"content":       reply.Content,
+				"user_id":       reply.UserID,
+				"username":      reply.User.Username,
+				"profile":       reply.User.Profile,
+				"name":          reply.User.Name,
+				"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
 				"relative_time": utils.TimeAgo(reply.CreatedAt),
 			})
 		}
 
-		// Menyusun data komentar beserta reply-nya
 		comments = append(comments, gin.H{
 			"id":            comment.ID,
 			"content":       comment.Content,
 			"user_id":       comment.UserID,
 			"username":      comment.User.Username,
+			"name":          comment.User.Name,
 			"profile":       comment.User.Profile,
 			"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
 			"relative_time": utils.TimeAgo(comment.CreatedAt),
-			"replies":       replies,  // Menambahkan reply pada komentar
+			"replies":       replies,
 		})
 	}
 
@@ -210,16 +203,16 @@ func GetForumByID(c *gin.Context) {
 		"photo":         forum.Photo,
 		"user_id":       forum.UserID,
 		"username":      forum.User.Username,
+		"name":          forum.User.Name,
 		"profile":       forum.User.Profile,
 		"category_id":   forum.CategoryID,
 		"category_name": forum.Category.Name,
 		"relative_time": utils.TimeAgo(forum.CreatedAt),
-		"comments":      comments, 
+		"comments":      comments,
 	}
 
 	c.JSON(http.StatusOK, response)
 }
-
 
 func UpdateForum(c *gin.Context) {
 	forumID := c.Param("id")

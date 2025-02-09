@@ -44,6 +44,7 @@ func SetupRouter(r *gin.Engine) {
 			comment.GET("/:id", controllers.GetCommentByID)
 			comment.DELETE("/:id", middlewares.AuthMiddleware(), controllers.DeleteComment)
 			comment.POST("/reply", middlewares.AuthMiddleware(), controllers.ReplyComment)
+			comment.DELETE("/reply/:id", middlewares.AuthMiddleware(), controllers.DeleteReply)
 		}
 
 		notification := api.Group("/notification")
