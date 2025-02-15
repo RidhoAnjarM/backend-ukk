@@ -50,6 +50,18 @@ func ReplyComment(c *gin.Context) {
 
 	reply.CommentID = parentComment.ID
 
+	parentReplyIDStr := c.PostForm("parent_reply_id")
+	if parentReplyIDStr != "" {
+		parentReplyID, err := strconv.Atoi(parentReplyIDStr)
+		if err == nil && parentReplyID > 0 {
+			var parentReply models.Reply
+			if err := database.DB.First(&parentReply, parentReplyID).Error; err == nil {
+				tempID := uint(parentReplyID)
+				reply.ParentReplyID = &tempID
+			}
+		}
+	}
+
 	reply.Content = c.PostForm("content")
 	if reply.Content == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Content cannot be empty"})
@@ -61,18 +73,29 @@ func ReplyComment(c *gin.Context) {
 		return
 	}
 
-	notification := models.Notification{
-		UserID:    parentComment.UserID,
-		Content:   fmt.Sprintf("%s membalas komentar anda: %s", userData.Username, reply.Content),
-		ForumID:   parentComment.ForumID,
-		CommentID: &parentComment.ID,
-		ReplyID:   &reply.ID,
-		CreatedAt: time.Now(),
-	}
-
-	if err := database.DB.Create(&notification).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create notification", "details": err.Error()})
-		return
+	if reply.ParentReplyID != nil {
+		var parentReply models.Reply
+		if err := database.DB.First(&parentReply, *reply.ParentReplyID).Error; err == nil {
+			notification := models.Notification{
+				UserID:    parentReply.UserID,
+				Content:   fmt.Sprintf("%s membalas komentar Anda: %s", userData.Username, reply.Content),
+				ForumID:   parentComment.ForumID,
+				CommentID: &parentComment.ID,
+				ReplyID:   &reply.ID,
+				CreatedAt: time.Now(),
+			}
+			database.DB.Create(&notification)
+		}
+	} else {
+		notification := models.Notification{
+			UserID:    parentComment.UserID,
+			Content:   fmt.Sprintf("%s membalas komentar Anda: %s", userData.Username, reply.Content),
+			ForumID:   parentComment.ForumID,
+			CommentID: &parentComment.ID,
+			ReplyID:   &reply.ID,
+			CreatedAt: time.Now(),
+		}
+		database.DB.Create(&notification)
 	}
 
 	if err := database.DB.Preload("User").First(&reply, reply.ID).Error; err != nil {
@@ -87,6 +110,7 @@ func ReplyComment(c *gin.Context) {
 		"username":      reply.User.Username,
 		"profile":       reply.User.Profile,
 		"parent_id":     reply.CommentID,
+		"parent_reply_id": reply.ParentReplyID,
 		"relative_time": utils.TimeAgo(reply.CreatedAt),
 	}
 

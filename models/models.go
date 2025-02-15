@@ -18,6 +18,7 @@ type Category struct {
 	ID   uint   `gorm:"primarykey" json:"id"`
 	Name string `json:"name"`
 }
+
 type User struct {
 	ID            uint           `gorm:"primarykey" json:"id"`
 	Name          string         `json:"name"`
@@ -60,12 +61,13 @@ type Comment struct {
 }
 
 type Reply struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	Content   string    `json:"content"`
-	CommentID uint      `json:"comment_id"`
-	UserID    uint      `json:"user_id"`
-	User      User      `json:"user" gorm:"foreignKey:UserID;references:ID"`
-	CreatedAt time.Time `json:"created_at"`
+	ID            uint      `gorm:"primarykey" json:"id"`
+	Content       string    `json:"content"`
+	CommentID     uint      `json:"comment_id"`
+	ParentReplyID *uint     `json:"parent_reply_id,omitempty"`
+	UserID        uint      `json:"user_id"`
+	User          User      `json:"user" gorm:"foreignKey:UserID;references:ID"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Like struct {

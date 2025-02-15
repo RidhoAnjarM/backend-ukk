@@ -25,9 +25,9 @@ func GetNotifications(c *gin.Context) {
 
 	var notifications []models.Notification
 	err := database.DB.
-		Preload("Comment.User").  // Preload User untuk Comment
-		Preload("Reply.User").    // Preload User untuk Reply
-		Preload("Forum").         // Preload Forum
+		Preload("Comment.User").  
+		Preload("Reply.User").    
+		Preload("Forum").         
 		Where("user_id = ?", userData.ID).
 		Order("created_at DESC").
 		Find(&notifications).Error

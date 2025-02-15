@@ -102,8 +102,8 @@ func GetAllForums(c *gin.Context) {
 	if len(forums) > 1 {
 		latestForum := forums[0]
 		remainingForums := forums[1:]
-		rand.Seed(time.Now().UnixNano())
-		rand.Shuffle(len(remainingForums), func(i, j int) {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		r.Shuffle(len(remainingForums), func(i, j int) {
 			remainingForums[i], remainingForums[j] = remainingForums[j], remainingForums[i]
 		})
 		forums = append([]models.Forum{latestForum}, remainingForums...)
@@ -187,6 +187,7 @@ func GetForumByID(c *gin.Context) {
 			"id":            comment.ID,
 			"content":       comment.Content,
 			"user_id":       comment.UserID,
+			"parent_id":     comment.ParentID,
 			"username":      comment.User.Username,
 			"name":          comment.User.Name,
 			"profile":       comment.User.Profile,
