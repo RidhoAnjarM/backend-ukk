@@ -19,6 +19,15 @@ func SetupRouter(r *gin.Engine) {
 		api.DELETE("/users/:id", controllers.DeleteUser)
 		api.GET("/profile", middlewares.AuthMiddleware(), controllers.GetUsername)
 
+		report := api.Group("/report")
+		{
+			report.POST("/akun", middlewares.AuthMiddleware(), controllers.ReportUser)
+			report.GET("/akun", controllers.GetPendingReports) 
+			report.POST("/akun/review", middlewares.AuthMiddleware(), controllers.ReviewReport)
+
+			report.POST("/forum", middlewares.AuthMiddleware(), controllers.ReportForumPost)
+			report.GET("/forum", controllers.GetPendingForumReports)
+		}
 		category := api.Group("/category")
 		{
 			category.POST("/", controllers.CreateCategory)
@@ -59,6 +68,12 @@ func SetupRouter(r *gin.Engine) {
 		profile := api.Group("/profil")
 		{
 			profile.GET("/", middlewares.AuthMiddleware(), controllers.GetProfile)
+		}
+
+		tags := api.Group("/tags")
+		{
+			tags.POST("/", controllers.CreateTagHandler)
+			tags.GET("/", controllers.GetTags)
 		}
 	}
 }

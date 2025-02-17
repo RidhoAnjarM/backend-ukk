@@ -104,14 +104,15 @@ func ReplyComment(c *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":            reply.ID,
-		"content":       reply.Content,
-		"user_id":       reply.UserID,
-		"username":      reply.User.Username,
-		"profile":       reply.User.Profile,
-		"parent_id":     reply.CommentID,
+		"id":              reply.ID,
+		"content":         reply.Content,
+		"user_id":         reply.UserID,
+		"username":        reply.User.Username,
+		"name":            reply.User.Name,
+		"profile":         reply.User.Profile,
+		"parent_id":       reply.CommentID,
 		"parent_reply_id": reply.ParentReplyID,
-		"relative_time": utils.TimeAgo(reply.CreatedAt),
+		"relative_time":   utils.TimeAgo(reply.CreatedAt),
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

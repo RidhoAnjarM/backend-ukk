@@ -39,7 +39,7 @@ func ConnectDatabase() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	safeAutoMigrate(db, &models.User{}, &models.Forum{}, &models.Category{}, &models.Comment{}, &models.Like{}, &models.Notification{}, &models.Reply{})
+	safeAutoMigrate(db, &models.User{}, &models.Forum{}, &models.Category{}, &models.Comment{}, &models.Like{}, &models.Notification{}, &models.Reply{}, &models.Report{}, &models.ForumReport{}, &models.Tag{})
 
 	DB = db
 	fmt.Println("Database nyambung")
@@ -53,3 +53,4 @@ func safeAutoMigrate(db *gorm.DB, models ...interface{}) {
         }
     }
 }
+

@@ -25,9 +25,9 @@ func GetNotifications(c *gin.Context) {
 
 	var notifications []models.Notification
 	err := database.DB.
-		Preload("Comment.User").  
-		Preload("Reply.User").    
-		Preload("Forum").         
+		Preload("Comment.User").
+		Preload("Reply.User").
+		Preload("Forum").
 		Where("user_id = ?", userData.ID).
 		Order("created_at DESC").
 		Find(&notifications).Error
@@ -35,6 +35,12 @@ func GetNotifications(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
 		return
 	}
+
+	// Hitung jumlah notifikasi yang belum dibaca (isRead = false)
+	var unreadCount int64
+	database.DB.Model(&models.Notification{}).
+		Where("user_id = ? AND is_read = ?", userData.ID, false).
+		Count(&unreadCount)
 
 	var result []gin.H
 	for _, notif := range notifications {
@@ -44,7 +50,7 @@ func GetNotifications(c *gin.Context) {
 			"isRead":     notif.IsRead,
 			"created_at": notif.CreatedAt,
 		}
-	
+
 		// Handle Forum
 		if notif.Forum != nil {
 			notificationData["forum_id"] = notif.Forum.ID
@@ -57,47 +63,42 @@ func GetNotifications(c *gin.Context) {
 			notificationData["photo"] = ""
 			notificationData["forum_relative_time"] = ""
 		}
-	
+
 		// Handle Comment & Reply
 		if notif.Reply != nil {
-			// Jika ini adalah notifikasi balasan komentar
 			notificationData["reply_id"] = notif.Reply.ID
 			notificationData["reply"] = notif.Reply.Content
 			notificationData["reply_user"] = notif.Reply.User.Username
 			notificationData["reply_profile"] = notif.Reply.User.Profile
 			notificationData["reply_relative_time"] = utils.TimeAgo(notif.Reply.CreatedAt)
-	
-			// Kosongkan data komentar karena ini balasan, bukan komentar utama
+
 			notificationData["comment_id"] = nil
 			notificationData["comment"] = ""
 			notificationData["user"] = ""
 			notificationData["profile"] = ""
 			notificationData["relative_time"] = ""
 		} else if notif.Comment != nil {
-			// Jika ini adalah notifikasi komentar biasa
 			notificationData["comment_id"] = notif.Comment.ID
 			notificationData["comment"] = notif.Comment.Content
 			notificationData["user"] = notif.Comment.User.Username
 			notificationData["profile"] = notif.Comment.User.Profile
 			notificationData["relative_time"] = utils.TimeAgo(notif.Comment.CreatedAt)
-	
-			// Kosongkan data balasan karena ini komentar utama, bukan balasan
+
 			notificationData["reply_id"] = nil
 			notificationData["reply"] = ""
 			notificationData["reply_user"] = ""
 			notificationData["reply_profile"] = ""
 			notificationData["reply_relative_time"] = ""
 		}
-	
+
 		result = append(result, notificationData)
 	}
-	
 
 	c.JSON(http.StatusOK, gin.H{
 		"notifications": result,
+		"unreadCount":   unreadCount,
 	})
 }
-
 
 func MarkNotificationAsRead(c *gin.Context) {
 	notificationID := c.Param("id")

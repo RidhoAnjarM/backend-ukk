@@ -35,6 +35,21 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	if user.Status == "suspended" {
+		if user.SuspendUntil != nil && time.Now().Before(*user.SuspendUntil) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":         "Akun anda terkena suspend",
+				"suspend_until": user.SuspendUntil.Format("2006-01-02 15:04:05"),
+			})
+			return
+		} else {
+			// Jika waktu suspend sudah habis, ubah status kembali ke "active"
+			user.Status = "active"
+			user.SuspendUntil = nil
+			database.DB.Save(&user)
+		}
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"id":   float64(user.ID),
 		"role": user.Role,
@@ -54,6 +69,7 @@ func Login(c *gin.Context) {
 		"profile":  user.Profile,
 		"password": user.Password,
 		"role":     user.Role,
+		"status":   user.Status,
 		"token":    tokenString,
 	})
 }
@@ -118,6 +134,7 @@ func Register(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "User berhasil dibuat",
+		"id":       input.ID,
 		"name":     input.Name,
 		"username": input.Username,
 		"profile":  input.Profile,

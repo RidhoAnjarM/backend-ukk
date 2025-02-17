@@ -57,6 +57,7 @@ func AddComment(c *gin.Context) {
 		"forum_id":      comment.ForumID,
 		"user_id":       comment.UserID,
 		"username":      comment.User.Username,
+		"name":          comment.User.Name,
 		"profile":       comment.User.Profile,
 		"relative_time": utils.TimeAgo(comment.CreatedAt),
 	}

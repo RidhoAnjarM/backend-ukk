@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ import (
 
 func CreateForum(c *gin.Context) {
 	var forum models.Forum
+	var tags []models.Tag
 
 	user, exists := c.Get("user")
 	if !exists {
@@ -32,6 +34,7 @@ func CreateForum(c *gin.Context) {
 
 	forum.UserID = uint(userData.ID)
 
+	// Upload foto jika ada
 	file, err := c.FormFile("photo")
 	if err != nil {
 		forum.Photo = ""
@@ -44,12 +47,14 @@ func CreateForum(c *gin.Context) {
 		forum.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
 	}
 
+	// Set judul forum
 	forum.Title = c.PostForm("title")
 	if forum.Title == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
 		return
 	}
 
+	// Set kategori jika ada
 	categoryIDStr := c.PostForm("category_id")
 	if categoryIDStr != "" {
 		categoryID, err := strconv.Atoi(categoryIDStr)
@@ -69,19 +74,43 @@ func CreateForum(c *gin.Context) {
 		forum.CategoryID = nil
 	}
 
+	// Ambil daftar tag dari request
+	tagNames := c.PostFormArray("tags") // Mengambil tags dalam bentuk array string
+
+	for _, tagName := range tagNames {
+		tagName = strings.TrimSpace(tagName)
+		if tagName == "" {
+			continue
+		}
+
+		var tag models.Tag
+		if err := database.DB.Where("name = ?", tagName).First(&tag).Error; err != nil {
+			// Jika tag tidak ada, buat baru
+			tag = models.Tag{Name: tagName}
+			database.DB.Create(&tag)
+		}
+
+		tags = append(tags, tag)
+	}
+
+	// Simpan forum ke database
+	forum.Tags = tags
 	if err := database.DB.Create(&forum).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum", "details": err.Error()})
 		return
 	}
 
-	database.DB.Preload("User").Preload("Category").First(&forum, forum.ID)
+	// Preload data untuk response
+	database.DB.Preload("User").Preload("Category").Preload("Tags").First(&forum, forum.ID)
 
+	// Buat response
 	response := models.ForumCreateResponse{
 		ID:           uint(forum.ID),
 		Title:        forum.Title,
 		Photo:        forum.Photo,
 		Username:     forum.User.Username,
 		CategoryName: forum.Category.Name,
+		Tags:         forum.Tags,
 		CreatedAt:    forum.CreatedAt.Format("2006-01-02 15:04:05"),
 		RelativeTime: utils.TimeAgo(forum.CreatedAt),
 	}
@@ -145,6 +174,7 @@ func GetAllForums(c *gin.Context) {
 			"title":         forum.Title,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
+			"tags":          forum.Tags,
 			"username":      forum.User.Username,
 			"name":          forum.User.Name,
 			"profile":       forum.User.Profile,
@@ -197,6 +227,14 @@ func GetForumByID(c *gin.Context) {
 		})
 	}
 
+	var tags []gin.H
+	for _, tag := range forum.Tags {
+		tags = append(tags, gin.H{
+			"id":   tag.ID,
+			"name": tag.Name,
+		})
+	}
+
 	// Menyusun data forum
 	response := gin.H{
 		"id":            forum.ID,
@@ -209,6 +247,7 @@ func GetForumByID(c *gin.Context) {
 		"category_id":   forum.CategoryID,
 		"category_name": forum.Category.Name,
 		"relative_time": utils.TimeAgo(forum.CreatedAt),
+		"tag":           tags,
 		"comments":      comments,
 	}
 

@@ -11,11 +11,13 @@ type Forum struct {
 	CategoryID   *uint     `json:"category_id"`
 	Category     Category  `json:"category" gorm:"foreignKey:CategoryID"`
 	Comments     []Comment `json:"comments" gorm:"foreignKey:ForumID"`
+	Tags         []Tag     `json:"tags" gorm:"many2many:forum_tags;"`
 	CreatedAt    time.Time `json:"created_at"`
 	RelativeTime string    `gorm:"-" json:"relative_time"`
 }
-type Category struct {
-	ID   uint   `gorm:"primarykey" json:"id"`
+
+type Tag struct {
+	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -31,6 +33,11 @@ type User struct {
 	Notifications []Notification `json:"notifications" gorm:"foreignKey:UserID"`
 	Forums        []Forum        `json:"forums" gorm:"foreignKey:UserID"`
 	CreatedAt     time.Time      `json:"created_at"`
+}
+
+type Category struct {
+	ID   uint   `gorm:"primarykey" json:"id"`
+	Name string `json:"name"`
 }
 
 type Notification struct {
@@ -76,4 +83,22 @@ type Like struct {
 	ForumID   *uint     `json:"forum_id,omitempty"`
 	CommentID *uint     `json:"comment_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type Report struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	ReporterID uint      `json:"reporter_id"`  
+	ReportedID uint      `json:"reported_id"`  
+	Reason     string    `json:"reason"`
+	Status     string    `json:"status"`  
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type ForumReport struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	ReporterID uint      `json:"reporter_id"`
+	ForumID    uint      `json:"forum_id"`
+	Reason     string    `json:"reason"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
 }
