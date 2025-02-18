@@ -8,11 +8,14 @@ import (
 
 	"backend/database"
 	"backend/routes"
-
+	"backend/controllers"
 )
 
 func main() {
 	r := gin.Default()
+
+	controllers.ScheduleWeeklyReset()
+	controllers.ScheduleWeeklyTagReset() 
 
 	r.Static("/uploads", "./uploads")
 

@@ -74,6 +74,14 @@ func SetupRouter(r *gin.Engine) {
 		{
 			tags.POST("/", controllers.CreateTagHandler)
 			tags.GET("/", controllers.GetTags)
+			tags.GET("/all", controllers.GetTagsAll)
+		}
+
+		populer := api.Group("/populer")
+		{
+			populer.GET("/tag", controllers.GetPopularTags)
+			populer.GET("/category", controllers.GetPopularCategories)
+
 		}
 	}
 }

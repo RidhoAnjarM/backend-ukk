@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,49 +35,61 @@ func CreateForum(c *gin.Context) {
 
 	forum.UserID = uint(userData.ID)
 
-	// Upload foto jika ada
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
 	file, err := c.FormFile("photo")
-	if err != nil {
-		forum.Photo = ""
-	} else {
+	if err == nil {
 		uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
 		if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
 			os.MkdirAll("./uploads", os.ModePerm)
 		}
-		c.SaveUploadedFile(file, uploadPath)
+		if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
+			return
+		}
 		forum.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
 	}
 
-	// Set judul forum
 	forum.Title = c.PostForm("title")
 	if forum.Title == "" {
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Title is required"})
 		return
 	}
 
-	// Set kategori jika ada
 	categoryIDStr := c.PostForm("category_id")
 	if categoryIDStr != "" {
 		categoryID, err := strconv.Atoi(categoryIDStr)
 		if err != nil || categoryID <= 0 {
+			tx.Rollback()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Category ID"})
 			return
 		}
 
 		var category models.Category
-		if err := database.DB.First(&category, categoryID).Error; err != nil {
+		if err := tx.First(&category, categoryID).Error; err != nil {
+			tx.Rollback()
 			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
 			return
 		}
 
 		forum.CategoryID = &category.ID
-	} else {
-		forum.CategoryID = nil
+
+		if err := tx.Model(&category).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
+			fmt.Println("Error updating category usage_count:", err)
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category usage count"})
+			return
+		}		
 	}
 
-	// Ambil daftar tag dari request
-	tagNames := c.PostFormArray("tags") // Mengambil tags dalam bentuk array string
-
+	tagNames := c.PostFormArray("tags")
 	for _, tagName := range tagNames {
 		tagName = strings.TrimSpace(tagName)
 		if tagName == "" {
@@ -84,26 +97,35 @@ func CreateForum(c *gin.Context) {
 		}
 
 		var tag models.Tag
-		if err := database.DB.Where("name = ?", tagName).First(&tag).Error; err != nil {
-			// Jika tag tidak ada, buat baru
-			tag = models.Tag{Name: tagName}
-			database.DB.Create(&tag)
+		if err := tx.Where("name = ?", tagName).First(&tag).Error; err != nil {
+			tag = models.Tag{Name: tagName, UsageCount: 1}
+			if err := tx.Create(&tag).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create tag"})
+				return
+			}
+		} else {
+			if err := tx.Model(&tag).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tag usage count"})
+				return
+			}
 		}
 
 		tags = append(tags, tag)
 	}
 
-	// Simpan forum ke database
 	forum.Tags = tags
-	if err := database.DB.Create(&forum).Error; err != nil {
+	if err := tx.Create(&forum).Error; err != nil {
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create forum", "details": err.Error()})
 		return
 	}
 
-	// Preload data untuk response
+	tx.Commit()
+
 	database.DB.Preload("User").Preload("Category").Preload("Tags").First(&forum, forum.ID)
 
-	// Buat response
 	response := models.ForumCreateResponse{
 		ID:           uint(forum.ID),
 		Title:        forum.Title,
@@ -123,7 +145,7 @@ func CreateForum(c *gin.Context) {
 
 func GetAllForums(c *gin.Context) {
 	var forums []models.Forum
-	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Order("created_at desc").Find(&forums).Error; err != nil {
+	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").Order("created_at desc").Find(&forums).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forums"})
 		return
 	}
@@ -169,12 +191,19 @@ func GetAllForums(c *gin.Context) {
 			})
 		}
 
+		var tags []gin.H
+		for _, tag := range forum.Tags {
+			tags = append(tags, gin.H{
+				"id":   tag.ID,
+				"name": tag.Name,
+			})
+		}
+
 		response = append(response, gin.H{
 			"id":            forum.ID,
 			"title":         forum.Title,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
-			"tags":          forum.Tags,
 			"username":      forum.User.Username,
 			"name":          forum.User.Name,
 			"profile":       forum.User.Profile,
@@ -182,6 +211,7 @@ func GetAllForums(c *gin.Context) {
 			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
 			"comments":      comments,
+			"tags":          tags,
 		})
 	}
 
@@ -192,7 +222,7 @@ func GetForumByID(c *gin.Context) {
 	id := c.Param("id")
 	var forum models.Forum
 
-	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").First(&forum, id).Error; err != nil {
+	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").First(&forum, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Forum not found"})
 		return
 	}

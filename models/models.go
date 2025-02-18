@@ -17,8 +17,9 @@ type Forum struct {
 }
 
 type Tag struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	UsageCount int    `json:"usage_count"`
 }
 
 type User struct {
@@ -36,8 +37,9 @@ type User struct {
 }
 
 type Category struct {
-	ID   uint   `gorm:"primarykey" json:"id"`
-	Name string `json:"name"`
+	ID         uint   `gorm:"primarykey" json:"id"`
+	Name       string `json:"name"`
+	UsageCount int    `json:"usage_count"`
 }
 
 type Notification struct {
@@ -87,10 +89,10 @@ type Like struct {
 
 type Report struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
-	ReporterID uint      `json:"reporter_id"`  
-	ReportedID uint      `json:"reported_id"`  
+	ReporterID uint      `json:"reporter_id"`
+	ReportedID uint      `json:"reported_id"`
 	Reason     string    `json:"reason"`
-	Status     string    `json:"status"`  
+	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 

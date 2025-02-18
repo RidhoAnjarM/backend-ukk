@@ -2,12 +2,12 @@ package controllers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"backend/models"
 	"backend/database"
-
 )
 
 func CreateCategory(c *gin.Context) {
@@ -84,3 +84,32 @@ func DeleteCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Category deleted"})
 }
 
+// GetPopularCategories - Ambil kategori berdasarkan jumlah penggunaan tertinggi
+func GetPopularCategories(c *gin.Context) {
+	var categories []models.Category
+
+	if err := database.DB.
+		Select("id, name, COALESCE(usage_count, 0) AS usage_count").
+		Order("usage_count DESC").
+		Limit(10).
+		Find(&categories).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch popular categories"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"popular_categories": categories})
+}
+
+func ResetCategoryUsage() {
+	database.DB.Model(&models.Category{}).Update("usage_count", 0)
+}
+
+// ScheduleWeeklyReset - Menjalankan reset setiap minggu (gunakan goroutine)
+func ScheduleWeeklyReset() {
+	ticker := time.NewTicker(7 * 24 * time.Hour) // Setiap 7 hari
+	go func() {
+		for range ticker.C {
+			ResetCategoryUsage()
+		}
+	}()
+}

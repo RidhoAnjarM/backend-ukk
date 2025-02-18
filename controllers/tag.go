@@ -5,6 +5,7 @@ import (
 	"backend/models"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,13 +44,11 @@ func TagExists(name string) (bool, error) {
 func GetTags(c *gin.Context) {
 	search := c.Query("q")
 
-	// Pastikan selalu return array, bahkan jika search kosong
 	if search == "" {
 		c.JSON(http.StatusOK, []models.Tag{})
 		return
 	}
 
-	// Query database
 	tags, err := GetAllTags(search)
 	if err != nil {
 		log.Println("Error querying database:", err)
@@ -66,19 +65,16 @@ func CreateTagHandler(c *gin.Context) {
 		Name string `json:"name"`
 	}
 
-	// Bind JSON request
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	// Validasi nama tag
 	if request.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Tag name cannot be empty"})
 		return
 	}
 
-	// Cek apakah tag sudah ada
 	exists, err := TagExists(request.Name)
 	if err != nil {
 		log.Println("Database error:", err)
@@ -91,7 +87,6 @@ func CreateTagHandler(c *gin.Context) {
 		return
 	}
 
-	// Buat tag baru
 	tag, err := CreateTag(request.Name)
 	if err != nil {
 		log.Println("Error inserting tag:", err)
@@ -99,9 +94,49 @@ func CreateTagHandler(c *gin.Context) {
 		return
 	}
 
-	// Response dengan data tag yang baru dibuat
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Tag created",
 		"tag": tag,
 	})
+}
+
+func GetTagsAll(c *gin.Context) {
+	var tags []models.Tag
+	if err := database.DB.Find(&tags).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch categories"})
+		return
+	}
+
+	c.JSON(http.StatusOK, tags)
+}
+
+func GetPopularTags(c *gin.Context) {
+	var tags []models.Tag
+
+	if err := database.DB.
+		Select("id, name, COALESCE(usage_count, 0) AS usage_count").
+		Order("usage_count DESC").
+		Limit(10).
+		Find(&tags).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch popular tags"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"popular_tags": tags})
+}
+
+
+// ResetTagUsage - Atur ulang usage_count menjadi 0 (jalankan setiap minggu)
+func ResetTagUsage() {
+	database.DB.Model(&models.Tag{}).Update("usage_count", 0)
+}
+
+// ScheduleWeeklyTagReset - Menjalankan reset setiap minggu (gunakan goroutine)
+func ScheduleWeeklyTagReset() {
+	ticker := time.NewTicker(7 * 24 * time.Hour) 
+	go func() {
+		for range ticker.C {
+			ResetTagUsage()
+		}
+	}()
 }
