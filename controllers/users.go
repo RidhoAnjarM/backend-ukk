@@ -10,7 +10,7 @@ import (
 
 	"backend/database"
 	"backend/models"
-    "backend/utils"
+	"backend/utils"
 )
 
 func GetUserByID(c *gin.Context) {
@@ -56,15 +56,16 @@ func GetUserByID(c *gin.Context) {
 	}
 
 	response := gin.H{
-		"id":            user.ID,
-		"name":          user.Name,
-		"username":      user.Username,
-		"profile":       user.Profile,
-		"role":          user.Role,
-		"status":        user.Status,
-		"suspend_until": user.SuspendUntil,
-		"created_at":    user.CreatedAt.Format("2006-01-02 15:04:05"),
-		"forums":        forumsResponse,
+		"id":               user.ID,
+		"name":             user.Name,
+		"username":         user.Username,
+		"profile":          user.Profile,
+		"role":             user.Role,
+		"status":           user.Status,
+		"suspend_until":    user.SuspendUntil,
+		"suspend_duration": user.SuspendDuration,
+		"created_at":       user.CreatedAt.Format("2006-01-02 15:04:05"),
+		"forums":           forumsResponse,
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -72,7 +73,6 @@ func GetUserByID(c *gin.Context) {
 		"profile": response,
 	})
 }
-
 
 func GetAllUsers(c *gin.Context) {
 	var users []models.User
@@ -84,12 +84,14 @@ func GetAllUsers(c *gin.Context) {
 	var response []gin.H
 	for _, user := range users {
 		response = append(response, gin.H{
-			"id":       user.ID,
-			"name":     user.Name,
-			"username": user.Username,
-			"profile":  user.Profile,
-			"status":   user.Status,
-			"role":     user.Role,
+			"id":               user.ID,
+			"name":             user.Name,
+			"username":         user.Username,
+			"profile":          user.Profile,
+			"status":           user.Status,
+			"role":             user.Role,
+			"suspend_until":    user.SuspendUntil,
+			"suspend_duration": user.SuspendDuration,
 		})
 	}
 
@@ -136,6 +138,18 @@ func UpdateUser(c *gin.Context) {
 		user.Password = string(hashedPassword)
 	}
 
+	// Update role
+	role := c.PostForm("role")
+	if role != "" {
+		user.Role = role
+	}
+
+	// Update status
+	status := c.PostForm("status")
+	if status != "" {
+		user.Status = status
+	}
+
 	// Handle profile picture upload
 	file, err := c.FormFile("profile")
 	if err == nil {
@@ -163,6 +177,8 @@ func UpdateUser(c *gin.Context) {
 		"name":     user.Name,
 		"username": user.Username,
 		"profile":  user.Profile,
+		"role":     user.Role,
+		"status":   user.Status,
 	})
 }
 

@@ -1,15 +1,40 @@
 package controllers
 
-import(
+import (
 	"net/http"
-	"time"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"backend/models"
 	"backend/database"
+	"backend/models"
 )
+
+func CheckExistingReport(c *gin.Context) {
+	// Ambil ID user dari token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Ambil ID user yang dilaporkan dari query
+	reportedID := c.Query("reported_id")
+	if reportedID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Reported ID diperlukan"})
+		return
+	}
+
+	// Cek apakah laporan dengan status 'pending' sudah ada
+	var existingReport models.Report
+	if err := database.DB.Where("reporter_id = ? AND reported_id = ? AND status = 'pending'", userID, reportedID).First(&existingReport).Error; err == nil {
+		c.JSON(http.StatusOK, gin.H{"exists": true})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"exists": false})
+}
 
 func ReportUser(c *gin.Context) {
 	// Ambil ID user dari token
@@ -19,10 +44,7 @@ func ReportUser(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		ReportedID uint   `json:"reported_id"`
-		Reason     string `json:"reason"`
-	}
+	var req models.Report
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
@@ -67,19 +89,43 @@ func ReportUser(c *gin.Context) {
 	})
 }
 
-
 func GetPendingReports(c *gin.Context) {
 	var reports []models.Report
-	if err := database.DB.Where("status = ?", "pending").Find(&reports).Error; err != nil {
+
+	// Preload data Reported User
+	if err := database.DB.Preload("ReportedUser").Where("status = ?", "pending").Find(&reports).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reports"})
 		return
 	}
-	c.JSON(http.StatusOK, reports)
+
+	// Format response dengan data lengkap
+	type ReportResponse struct {
+		ID           uint        `json:"id"`
+		ReporterID   uint        `json:"reporter_id"`
+		ReportedID   uint        `json:"reported_id"`
+		Reason       string      `json:"reason"`
+		Status       string      `json:"status"`
+		CreatedAt    time.Time   `json:"created_at"`
+		ReportedUser models.User `json:"reported_user"`
+	}
+
+	var response []ReportResponse
+	for _, report := range reports {
+		response = append(response, ReportResponse{
+			ID:           report.ID,
+			ReporterID:   report.ReporterID,
+			ReportedID:   report.ReportedID,
+			Reason:       report.Reason,
+			Status:       report.Status,
+			CreatedAt:    report.CreatedAt,
+			ReportedUser: report.ReportedUser,
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
-
 func ReviewReport(c *gin.Context) {
-	// Ambil role dari token
 	role, exists := c.Get("role")
 	if !exists || role.(string) != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
@@ -104,14 +150,12 @@ func ReviewReport(c *gin.Context) {
 	}
 
 	if req.Action == "reject" {
-		// Jika laporan ditolak, update status jadi "rejected"
 		report.Status = "rejected"
 		database.DB.Save(&report)
 		c.JSON(http.StatusOK, gin.H{"message": "Report rejected"})
 		return
 	}
 
-	// Jika laporan disetujui, suspend akun
 	var user models.User
 	if err := database.DB.First(&user, report.ReportedID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -121,16 +165,44 @@ func ReviewReport(c *gin.Context) {
 	suspendUntil := time.Now().Add(time.Duration(req.Days) * 24 * time.Hour)
 	user.Status = "suspended"
 	user.SuspendUntil = &suspendUntil
+	user.SuspendDuration = req.Days
 	report.Status = "approved"
 
 	database.DB.Save(&user)
 	database.DB.Save(&report)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":       "User suspended successfully",
-		"user_id":       user.ID,
-		"suspend_until": suspendUntil.Format("2006-01-02 15:04:05"),
+		"message":         "User suspended successfully",
+		"user_id":         user.ID,
+		"suspend_until":   suspendUntil.Format("2006-01-02 15:04:05"),
+		"suspend_duration": req.Days,
 	})
+}
+
+
+func CheckExistingForumReport(c *gin.Context) {
+	// Ambil ID user dari token
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Ambil ID forum dari query
+	forumID := c.Query("forum_id")
+	if forumID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Forum ID diperlukan"})
+		return
+	}
+
+	// Cek apakah laporan dengan status 'pending' sudah ada
+	var existingReport models.ForumReport
+	if err := database.DB.Where("reporter_id = ? AND forum_id = ? AND status = 'pending'", userID, forumID).First(&existingReport).Error; err == nil {
+		c.JSON(http.StatusOK, gin.H{"exists": true})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"exists": false})
 }
 
 func ReportForumPost(c *gin.Context) {
@@ -189,10 +261,44 @@ func ReportForumPost(c *gin.Context) {
 
 func GetPendingForumReports(c *gin.Context) {
 	var reports []models.ForumReport
-	if err := database.DB.Where("status = ?", "pending").Find(&reports).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reports"})
+
+	// Preload data Forum dan User dari Forum
+	if err := database.DB.Preload("Forum.User").Where("status = ?", "pending").Find(&reports).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forum reports"})
 		return
 	}
-	c.JSON(http.StatusOK, reports)
-}
 
+	// Format response dengan data lengkap
+	type ForumReportResponse struct {
+		ID         uint         `json:"id"`
+		ReporterID uint         `json:"reporter_id"`
+		ForumID    uint         `json:"forum_id"`
+		Reason     string       `json:"reason"`
+		Status     string       `json:"status"`
+		CreatedAt  time.Time    `json:"created_at"`
+		Forum      models.Forum `json:"forum"`
+	}
+
+	var response []ForumReportResponse
+	for _, report := range reports {
+		// Cek apakah forum masih ada
+		if report.Forum.ID == 0 {
+			// Hapus report jika forumnya sudah tidak ada
+			database.DB.Delete(&report)
+			continue
+		}
+
+		// Tambahkan ke response jika forum valid
+		response = append(response, ForumReportResponse{
+			ID:         report.ID,
+			ReporterID: report.ReporterID,
+			ForumID:    report.ForumID,
+			Reason:     report.Reason,
+			Status:     report.Status,
+			CreatedAt:  report.CreatedAt,
+			Forum:      report.Forum,
+		})
+	}
+
+	c.JSON(http.StatusOK, response)
+}

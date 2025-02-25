@@ -21,13 +21,17 @@ func SetupRouter(r *gin.Engine) {
 
 		report := api.Group("/report")
 		{
-			report.POST("/akun", middlewares.AuthMiddleware(), controllers.ReportUser)
 			report.GET("/akun", controllers.GetPendingReports) 
 			report.POST("/akun/review", middlewares.AuthMiddleware(), controllers.ReviewReport)
-
-			report.POST("/forum", middlewares.AuthMiddleware(), controllers.ReportForumPost)
 			report.GET("/forum", controllers.GetPendingForumReports)
+			
+			report.POST("/akun", middlewares.AuthMiddleware(), controllers.ReportUser)
+			report.POST("/forum", middlewares.AuthMiddleware(), controllers.ReportForumPost)
+
+			report.GET("/akun/check", middlewares.AuthMiddleware(), controllers.CheckExistingReport)
+			report.GET("/forum/check", middlewares.AuthMiddleware(), controllers.CheckExistingForumReport)
 		}
+
 		category := api.Group("/category")
 		{
 			category.POST("/", controllers.CreateCategory)
@@ -40,8 +44,8 @@ func SetupRouter(r *gin.Engine) {
 		forum := api.Group("/forum")
 		{
 			forum.POST("/", middlewares.AuthMiddleware(), controllers.CreateForum)
-			forum.GET("/", controllers.GetAllForums)
-			forum.GET("/:id", controllers.GetForumByID)
+			forum.GET("/", middlewares.AuthMiddleware(), controllers.GetAllForums)
+			forum.GET("/:id", middlewares.AuthMiddleware(), controllers.GetForumByID)
 			forum.PUT("/:id", middlewares.AuthMiddleware(), controllers.UpdateForum)
 			forum.DELETE("/:id", middlewares.AuthMiddleware(), controllers.DeleteForum)
 		}
@@ -82,6 +86,12 @@ func SetupRouter(r *gin.Engine) {
 			populer.GET("/tag", controllers.GetPopularTags)
 			populer.GET("/category", controllers.GetPopularCategories)
 
+		}
+
+		like := api.Group("/like")
+		{
+			like.POST("/", middlewares.AuthMiddleware(), controllers.LikeForum)
+			like.GET("/", controllers.GetForumLikesCount)
 		}
 	}
 }

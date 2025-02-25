@@ -2,13 +2,13 @@ package controllers
 
 import (
 	"fmt"
+	"gorm.io/gorm"
 	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 
@@ -34,7 +34,6 @@ func CreateForum(c *gin.Context) {
 	}
 
 	forum.UserID = uint(userData.ID)
-
 	tx := database.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -63,6 +62,13 @@ func CreateForum(c *gin.Context) {
 		return
 	}
 
+	forum.Description = c.PostForm("description")
+	if forum.Description == "" {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Description is required"})
+		return
+	}
+
 	categoryIDStr := c.PostForm("category_id")
 	if categoryIDStr != "" {
 		categoryID, err := strconv.Atoi(categoryIDStr)
@@ -80,13 +86,6 @@ func CreateForum(c *gin.Context) {
 		}
 
 		forum.CategoryID = &category.ID
-
-		if err := tx.Model(&category).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
-			fmt.Println("Error updating category usage_count:", err)
-			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category usage count"})
-			return
-		}		
 	}
 
 	tagNames := c.PostFormArray("tags")
@@ -98,20 +97,13 @@ func CreateForum(c *gin.Context) {
 
 		var tag models.Tag
 		if err := tx.Where("name = ?", tagName).First(&tag).Error; err != nil {
-			tag = models.Tag{Name: tagName, UsageCount: 1}
+			tag = models.Tag{Name: tagName, UsageCount: 0}
 			if err := tx.Create(&tag).Error; err != nil {
 				tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create tag"})
 				return
 			}
-		} else {
-			if err := tx.Model(&tag).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
-				tx.Rollback()
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tag usage count"})
-				return
-			}
 		}
-
 		tags = append(tags, tag)
 	}
 
@@ -122,6 +114,23 @@ func CreateForum(c *gin.Context) {
 		return
 	}
 
+	// Update usage count AFTER successful forum creation
+	if forum.CategoryID != nil {
+		if err := tx.Model(&models.Category{}).Where("id = ?", forum.CategoryID).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category usage count"})
+			return
+		}
+	}
+
+	for _, tag := range tags {
+		if err := tx.Model(&models.Tag{}).Where("id = ?", tag.ID).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tag usage count"})
+			return
+		}
+	}
+
 	tx.Commit()
 
 	database.DB.Preload("User").Preload("Category").Preload("Tags").First(&forum, forum.ID)
@@ -129,6 +138,7 @@ func CreateForum(c *gin.Context) {
 	response := models.ForumCreateResponse{
 		ID:           uint(forum.ID),
 		Title:        forum.Title,
+		Description:  forum.Description,
 		Photo:        forum.Photo,
 		Username:     forum.User.Username,
 		CategoryName: forum.Category.Name,
@@ -144,6 +154,12 @@ func CreateForum(c *gin.Context) {
 }
 
 func GetAllForums(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var forums []models.Forum
 	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").Order("created_at desc").Find(&forums).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forums"})
@@ -162,6 +178,10 @@ func GetAllForums(c *gin.Context) {
 
 	var response []gin.H
 	for _, forum := range forums {
+		// Cek apakah user sudah like forum ini
+		var like models.Like
+		liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
+
 		var comments []gin.H
 		for _, comment := range forum.Comments {
 			var replies []gin.H
@@ -202,6 +222,7 @@ func GetAllForums(c *gin.Context) {
 		response = append(response, gin.H{
 			"id":            forum.ID,
 			"title":         forum.Title,
+			"description":   forum.Description,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
@@ -210,8 +231,11 @@ func GetAllForums(c *gin.Context) {
 			"category_id":   forum.CategoryID,
 			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
+			"like":          forum.LikesCount,
+			"liked":         liked,
 			"comments":      comments,
 			"tags":          tags,
+			"createAt":      forum.CreatedAt,
 		})
 	}
 
@@ -219,13 +243,29 @@ func GetAllForums(c *gin.Context) {
 }
 
 func GetForumByID(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	id := c.Param("id")
 	var forum models.Forum
 
-	if err := database.DB.Preload("User").Preload("Category").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").First(&forum, id).Error; err != nil {
+	// Ambil forum beserta relasi yang diperlukan
+	if err := database.DB.Preload("User").
+		Preload("Category").
+		Preload("Comments.User").
+		Preload("Comments.Replies.User").
+		Preload("Tags").
+		First(&forum, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Forum not found"})
 		return
 	}
+
+	// Cek apakah user sudah like forum ini
+	var like models.Like
+	liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
 
 	var comments []gin.H
 	for _, comment := range forum.Comments {
@@ -269,6 +309,7 @@ func GetForumByID(c *gin.Context) {
 	response := gin.H{
 		"id":            forum.ID,
 		"title":         forum.Title,
+		"description":   forum.Description,
 		"photo":         forum.Photo,
 		"user_id":       forum.UserID,
 		"username":      forum.User.Username,
@@ -276,8 +317,10 @@ func GetForumByID(c *gin.Context) {
 		"profile":       forum.User.Profile,
 		"category_id":   forum.CategoryID,
 		"category_name": forum.Category.Name,
+		"like":          forum.LikesCount,
+		"liked":         liked,
 		"relative_time": utils.TimeAgo(forum.CreatedAt),
-		"tag":           tags,
+		"tags":          tags,
 		"comments":      comments,
 	}
 
@@ -372,6 +415,7 @@ func UpdateForum(c *gin.Context) {
 func DeleteForum(c *gin.Context) {
 	forumID := c.Param("id")
 
+	// Cek autentikasi user
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -384,19 +428,20 @@ func DeleteForum(c *gin.Context) {
 		return
 	}
 
+	// Cek apakah forum ada
 	var forum models.Forum
 	if err := database.DB.Preload("Comments.Replies").First(&forum, forumID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Forum not found"})
 		return
 	}
 
-	// Pastikan hanya pembuat forum atau admin yang dapat menghapus
+	// Hanya pemilik forum atau admin yang bisa menghapus
 	if forum.UserID != uint(userData.ID) && userData.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You can only delete your own forum"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to delete this forum"})
 		return
 	}
 
-	// Hapus semua komentar dan reply terkait forum
+	// Hapus semua komentar dan balasannya
 	for _, comment := range forum.Comments {
 		for _, reply := range comment.Replies {
 			if err := database.DB.Delete(&reply).Error; err != nil {
@@ -410,10 +455,26 @@ func DeleteForum(c *gin.Context) {
 		}
 	}
 
+	// Hapus forum
 	if err := database.DB.Delete(&forum).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete forum", "details": err.Error()})
 		return
 	}
 
+	// Kirim notifikasi ke pemilik forum jika dihapus oleh admin
+	if userData.Role == "admin" && forum.UserID != uint(userData.ID) {
+		notification := models.Notification{
+			UserID:  forum.UserID,
+			Content: "Forum Anda dengan judul '" + forum.Title + "' telah dihapus oleh admin karena melanggar kebijakan.",
+			ForumID: forum.ID,
+			IsRead:  false,
+		}
+		if err := database.DB.Create(&notification).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send notification", "details": err.Error()})
+			return
+		}
+	}
+
+	// Respons sukses
 	c.JSON(http.StatusOK, gin.H{"message": "Forum deleted successfully"})
 }

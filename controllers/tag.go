@@ -126,12 +126,10 @@ func GetPopularTags(c *gin.Context) {
 }
 
 
-// ResetTagUsage - Atur ulang usage_count menjadi 0 (jalankan setiap minggu)
 func ResetTagUsage() {
 	database.DB.Model(&models.Tag{}).Update("usage_count", 0)
 }
 
-// ScheduleWeeklyTagReset - Menjalankan reset setiap minggu (gunakan goroutine)
 func ScheduleWeeklyTagReset() {
 	ticker := time.NewTicker(7 * 24 * time.Hour) 
 	go func() {

@@ -3,6 +3,8 @@ package controllers
 import (
 	"net/http"
 	"time"
+	"fmt"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,18 +13,37 @@ import (
 )
 
 func CreateCategory(c *gin.Context) {
-	var category models.Category
-	if err := c.ShouldBindJSON(&category); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
+    var category models.Category
 
-	if err := database.DB.Create(&category).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create category"})
-		return
-	}
+    // Ambil data dari form-data
+    category.Name = c.PostForm("name")
 
-	c.JSON(http.StatusOK, gin.H{"message": "Category created", "data": category})
+    // Handle file upload
+    file, err := c.FormFile("photo")
+    if err == nil {
+        // Buat folder uploads jika belum ada
+        uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
+        if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
+            os.MkdirAll("./uploads", os.ModePerm)
+        }
+
+        // Simpan file yang diunggah ke folder uploads
+        if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
+            return
+        }
+
+        // Simpan path foto ke dalam database
+        category.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
+    }
+
+    // Simpan data kategori ke database
+    if err := database.DB.Create(&category).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create category"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Category created", "data": category})
 }
 
 func GetCategories(c *gin.Context) {
@@ -48,24 +69,46 @@ func GetCategoryByID(c *gin.Context) {
 }
 
 func UpdateCategory(c *gin.Context) {
-	id := c.Param("id")
-	var category models.Category
-	if err := database.DB.First(&category, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
-		return
-	}
+    id := c.Param("id")
+    var category models.Category
 
-	if err := c.ShouldBindJSON(&category); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
+    // Cari kategori berdasarkan ID
+    if err := database.DB.First(&category, id).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+        return
+    }
 
-	if err := database.DB.Save(&category).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category"})
-		return
-	}
+    // Ambil data dari form-data
+    if name := c.PostForm("name"); name != "" {
+        category.Name = name
+    }
 
-	c.JSON(http.StatusOK, gin.H{"message": "Category updated", "data": category})
+    // Handle file upload
+    file, err := c.FormFile("photo")
+    if err == nil {
+        // Buat folder uploads jika belum ada
+        uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
+        if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
+            os.MkdirAll("./uploads", os.ModePerm)
+        }
+
+        // Simpan file yang diunggah ke folder uploads
+        if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
+            return
+        }
+
+        // Simpan path foto ke dalam database
+        category.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
+    }
+
+    // Update data kategori di database
+    if err := database.DB.Save(&category).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Category updated", "data": category})
 }
 
 func DeleteCategory(c *gin.Context) {
@@ -104,9 +147,8 @@ func ResetCategoryUsage() {
 	database.DB.Model(&models.Category{}).Update("usage_count", 0)
 }
 
-// ScheduleWeeklyReset - Menjalankan reset setiap minggu (gunakan goroutine)
 func ScheduleWeeklyReset() {
-	ticker := time.NewTicker(7 * 24 * time.Hour) // Setiap 7 hari
+	ticker := time.NewTicker(7 * 24 * time.Hour) 
 	go func() {
 		for range ticker.C {
 			ResetCategoryUsage()

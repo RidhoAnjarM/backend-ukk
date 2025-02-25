@@ -3,6 +3,7 @@ package models
 type ForumResponse struct {
 	ID           int    `json:"id"`
 	Title        string `json:"title"`
+	Description  string `json:"description"`
 	Photo        string `json:"photo"`
 	UserID       uint   `json:"user_id"`
 	Username     string `json:"username"`
@@ -13,13 +14,13 @@ type ForumResponse struct {
 }
 
 type ForumCreateResponse struct {
-	ID           uint      `json:"id"`
-	Title        string    `json:"title"`
-	Photo        string    `json:"photo"`
-	Username     string    `json:"username"`
-	CategoryName string    `json:"category_name"`
-	Tags         []Tag     `json:"tags"`
-	CreatedAt    string    `json:"created_at"`
-	RelativeTime string    `json:"relative_time"`
+	ID           uint   `json:"id"`
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	Photo        string `json:"photo"`
+	Username     string `json:"username"`
+	CategoryName string `json:"category_name"`
+	Tags         []Tag  `json:"tags"`
+	CreatedAt    string `json:"created_at"`
+	RelativeTime string `json:"relative_time"`
 }
-

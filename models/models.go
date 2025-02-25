@@ -5,6 +5,7 @@ import "time"
 type Forum struct {
 	ID           uint      `gorm:"primarykey" json:"id"`
 	Title        string    `json:"title"`
+	Description  string    `json:"description"`
 	Photo        string    `json:"photo"`
 	UserID       uint      `json:"user_id"`
 	User         User      `json:"user" gorm:"foreignKey:UserID;references:ID"`
@@ -12,6 +13,7 @@ type Forum struct {
 	Category     Category  `json:"category" gorm:"foreignKey:CategoryID"`
 	Comments     []Comment `json:"comments" gorm:"foreignKey:ForumID"`
 	Tags         []Tag     `json:"tags" gorm:"many2many:forum_tags;"`
+	LikesCount   int64     `json:"likes_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	RelativeTime string    `gorm:"-" json:"relative_time"`
 }
@@ -23,22 +25,24 @@ type Tag struct {
 }
 
 type User struct {
-	ID            uint           `gorm:"primarykey" json:"id"`
-	Name          string         `json:"name"`
-	Username      string         `gorm:"unique;not null" form:"username" json:"username"`
-	Password      string         `form:"password" json:"password"`
-	Profile       string         `form:"profile" json:"profile"`
-	Role          string         `form:"role" json:"role"`
-	Status        string         `form:"status" json:"status"`
-	SuspendUntil  *time.Time     `form:"suspend_until" json:"suspend_until,omitempty"`
-	Notifications []Notification `json:"notifications" gorm:"foreignKey:UserID"`
-	Forums        []Forum        `json:"forums" gorm:"foreignKey:UserID"`
-	CreatedAt     time.Time      `json:"created_at"`
+	ID              uint           `gorm:"primarykey" json:"id"`
+	Name            string         `json:"name"`
+	Username        string         `gorm:"unique;not null" form:"username" json:"username"`
+	Password        string         `form:"password" json:"password"`
+	Profile         string         `form:"profile" json:"profile"`
+	Role            string         `form:"role" json:"role"`
+	Status          string         `form:"status" json:"status"`
+	SuspendUntil    *time.Time     `form:"suspend_until" json:"suspend_until,omitempty"`
+	SuspendDuration int            `json:"suspend_duration"`
+	Notifications   []Notification `json:"notifications" gorm:"foreignKey:UserID"`
+	Forums          []Forum        `json:"forums" gorm:"foreignKey:UserID"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
 
 type Category struct {
 	ID         uint   `gorm:"primarykey" json:"id"`
 	Name       string `json:"name"`
+	Photo      string `json:"photo"`
 	UsageCount int    `json:"usage_count"`
 }
 
@@ -88,12 +92,13 @@ type Like struct {
 }
 
 type Report struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	ReporterID uint      `json:"reporter_id"`
-	ReportedID uint      `json:"reported_id"`
-	Reason     string    `json:"reason"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	ReporterID   uint      `json:"reporter_id"`
+	ReportedID   uint      `json:"reported_id"`
+	Reason       string    `json:"reason"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"created_at"`
+	ReportedUser User      `gorm:"foreignKey:ReportedID" json:"reported_user"`
 }
 
 type ForumReport struct {
@@ -103,4 +108,5 @@ type ForumReport struct {
 	Reason     string    `json:"reason"`
 	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"created_at"`
+	Forum      Forum     `gorm:"foreignKey:ForumID" json:"forum"`
 }
