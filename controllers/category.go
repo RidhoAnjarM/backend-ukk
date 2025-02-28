@@ -132,9 +132,8 @@ func GetPopularCategories(c *gin.Context) {
 	var categories []models.Category
 
 	if err := database.DB.
-		Select("id, name, COALESCE(usage_count, 0) AS usage_count").
+		Select("id, name, photo, COALESCE(usage_count, 0) AS usage_count").
 		Order("usage_count DESC").
-		Limit(10).
 		Find(&categories).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch popular categories"})
 		return
