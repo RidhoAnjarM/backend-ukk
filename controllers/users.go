@@ -16,14 +16,29 @@ import (
 func GetUserByID(c *gin.Context) {
 	id := c.Param("id")
 
+	_, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	var user models.User
-	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").First(&user, id).Error; err != nil {
+	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
 	var forumsResponse []gin.H
 	for _, forum := range user.Forums {
+		var like models.Like
+		liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
+		var comments []gin.H
 		for _, comment := range forum.Comments {
 			var replies []gin.H
 			for _, reply := range comment.Replies {
@@ -38,11 +53,32 @@ func GetUserByID(c *gin.Context) {
 					"relative_time": utils.TimeAgo(reply.CreatedAt),
 				})
 			}
+
+			comments = append(comments, gin.H{
+				"id":            comment.ID,
+				"content":       comment.Content,
+				"user_id":       comment.UserID,
+				"username":      comment.User.Username,
+				"name":          comment.User.Name,
+				"profile":       comment.User.Profile,
+				"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
+				"relative_time": utils.TimeAgo(comment.CreatedAt),
+				"replies":       replies,
+			})
+		}
+
+		var tags []gin.H
+		for _, tag := range forum.Tags {
+			tags = append(tags, gin.H{
+				"id":   tag.ID,
+				"name": tag.Name,
+			})
 		}
 
 		forumResponse := gin.H{
 			"id":            forum.ID,
 			"title":         forum.Title,
+			"description":   forum.Description,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
@@ -51,6 +87,10 @@ func GetUserByID(c *gin.Context) {
 			"category_id":   forum.CategoryID,
 			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
+			"like":          forum.LikesCount,
+			"liked":         liked,
+			"comments":      comments,
+			"tags":          tags,
 		}
 		forumsResponse = append(forumsResponse, forumResponse)
 	}

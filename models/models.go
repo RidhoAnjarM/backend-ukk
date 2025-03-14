@@ -14,14 +14,15 @@ type Forum struct {
 	Comments     []Comment `json:"comments" gorm:"foreignKey:ForumID"`
 	Tags         []Tag     `json:"tags" gorm:"many2many:forum_tags;"`
 	LikesCount   int64     `json:"likes_count"`
-	CreatedAt    time.Time `json:"created_at"`
 	RelativeTime string    `gorm:"-" json:"relative_time"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Tag struct {
 	ID         int    `json:"id"`
 	Name       string `json:"name"`
 	UsageCount int    `json:"usage_count"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
 
 type User struct {
@@ -44,6 +45,7 @@ type Category struct {
 	Name       string `json:"name"`
 	Photo      string `json:"photo"`
 	UsageCount int    `json:"usage_count"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
 
 type Notification struct {

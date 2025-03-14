@@ -64,16 +64,18 @@ func AddComment(c *gin.Context) {
 
 	var forum models.Forum
 	if err := database.DB.First(&forum, comment.ForumID).Error; err == nil {
-		var forumUser models.User
-		if err := database.DB.First(&forumUser, forum.UserID).Error; err == nil {
-			notification := models.Notification{
-				UserID:    forumUser.ID,
-				Content:   fmt.Sprintf("%s mengomentari postingan anda: %s ", userData.Username, comment.Content),
-				ForumID:   forum.ID,
-				CommentID: &comment.ID,
-				CreatedAt: time.Now(),
+		if forum.UserID != userData.ID {
+			var forumUser models.User
+			if err := database.DB.First(&forumUser, forum.UserID).Error; err == nil {
+				notification := models.Notification{
+					UserID:    forumUser.ID,
+					Content:   fmt.Sprintf("%s mengomentari postingan anda: %s ", userData.Username, comment.Content),
+					ForumID:   forum.ID,
+					CommentID: &comment.ID,
+					CreatedAt: time.Now(),
+				}
+				database.DB.Create(&notification)
 			}
-			database.DB.Create(&notification)
 		}
 	}
 

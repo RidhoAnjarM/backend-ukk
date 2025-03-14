@@ -15,29 +15,23 @@ import (
 func CreateCategory(c *gin.Context) {
     var category models.Category
 
-    // Ambil data dari form-data
     category.Name = c.PostForm("name")
 
-    // Handle file upload
     file, err := c.FormFile("photo")
     if err == nil {
-        // Buat folder uploads jika belum ada
         uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
         if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
             os.MkdirAll("./uploads", os.ModePerm)
         }
 
-        // Simpan file yang diunggah ke folder uploads
         if err := c.SaveUploadedFile(file, uploadPath); err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
             return
         }
 
-        // Simpan path foto ke dalam database
         category.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
     }
 
-    // Simpan data kategori ke database
     if err := database.DB.Create(&category).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create category"})
         return
@@ -46,6 +40,7 @@ func CreateCategory(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "Category created", "data": category})
 }
 
+//getAll
 func GetCategories(c *gin.Context) {
 	var categories []models.Category
 	if err := database.DB.Find(&categories).Error; err != nil {
@@ -56,6 +51,7 @@ func GetCategories(c *gin.Context) {
 	c.JSON(http.StatusOK, categories)
 }
 
+//getID
 func GetCategoryByID(c *gin.Context) {
     categoryID := c.Param("id") 
     var category models.Category
@@ -68,41 +64,35 @@ func GetCategoryByID(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"data": category})
 }
 
+//update
 func UpdateCategory(c *gin.Context) {
     id := c.Param("id")
     var category models.Category
 
-    // Cari kategori berdasarkan ID
     if err := database.DB.First(&category, id).Error; err != nil {
         c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
         return
     }
 
-    // Ambil data dari form-data
     if name := c.PostForm("name"); name != "" {
         category.Name = name
     }
 
-    // Handle file upload
     file, err := c.FormFile("photo")
     if err == nil {
-        // Buat folder uploads jika belum ada
         uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
         if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
             os.MkdirAll("./uploads", os.ModePerm)
         }
 
-        // Simpan file yang diunggah ke folder uploads
         if err := c.SaveUploadedFile(file, uploadPath); err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save uploaded file"})
             return
         }
 
-        // Simpan path foto ke dalam database
         category.Photo = fmt.Sprintf("/uploads/%s", file.Filename)
     }
 
-    // Update data kategori di database
     if err := database.DB.Save(&category).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update category"})
         return
@@ -111,6 +101,7 @@ func UpdateCategory(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{"message": "Category updated", "data": category})
 }
 
+//delete
 func DeleteCategory(c *gin.Context) {
 	id := c.Param("id")
 	var category models.Category
@@ -127,7 +118,7 @@ func DeleteCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Category deleted"})
 }
 
-// GetPopularCategories - Ambil kategori berdasarkan jumlah penggunaan tertinggi
+//kategori populer
 func GetPopularCategories(c *gin.Context) {
 	var categories []models.Category
 
@@ -147,7 +138,7 @@ func ResetCategoryUsage() {
 }
 
 func ScheduleWeeklyReset() {
-	ticker := time.NewTicker(7 * 24 * time.Hour) 
+	ticker := time.NewTicker(1 * 24 * time.Hour) 
 	go func() {
 		for range ticker.C {
 			ResetCategoryUsage()

@@ -16,6 +16,12 @@ func GetProfile(c *gin.Context) {
 		return
 	}
 
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
 	userData, ok := user.(models.User)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user data in context"})
@@ -23,13 +29,15 @@ func GetProfile(c *gin.Context) {
 	}
 
 	var userWithForums models.User
-	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").First(&userWithForums, userData.ID).Error; err != nil {
+	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&userWithForums, userData.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user data", "details": err.Error()})
 		return
 	}
 
 	var forumsResponse []gin.H
 	for _, forum := range userWithForums.Forums {
+		var like models.Like
+		liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
 		var comments []gin.H
 		for _, comment := range forum.Comments {
 			var replies []gin.H
@@ -59,9 +67,18 @@ func GetProfile(c *gin.Context) {
 			})
 		}
 
+		var tags []gin.H
+		for _, tag := range forum.Tags {
+			tags = append(tags, gin.H{
+				"id":   tag.ID,
+				"name": tag.Name,
+			})
+		}
+
 		forumResponse := gin.H{
 			"id":            forum.ID,
 			"title":         forum.Title,
+			"description":   forum.Description,
 			"photo":         forum.Photo,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
@@ -70,7 +87,10 @@ func GetProfile(c *gin.Context) {
 			"category_id":   forum.CategoryID,
 			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
+			"like":          forum.LikesCount,
+			"liked":         liked,
 			"comments":      comments,
+			"tags":          tags,
 		}
 		forumsResponse = append(forumsResponse, forumResponse)
 	}

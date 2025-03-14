@@ -76,8 +76,22 @@ func ReplyComment(c *gin.Context) {
 	if reply.ParentReplyID != nil {
 		var parentReply models.Reply
 		if err := database.DB.First(&parentReply, *reply.ParentReplyID).Error; err == nil {
+			if parentReply.UserID != userData.ID {
+				notification := models.Notification{
+					UserID:    parentReply.UserID,
+					Content:   fmt.Sprintf("%s membalas komentar Anda: %s", userData.Username, reply.Content),
+					ForumID:   parentComment.ForumID,
+					CommentID: &parentComment.ID,
+					ReplyID:   &reply.ID,
+					CreatedAt: time.Now(),
+				}
+				database.DB.Create(&notification)
+			}
+		}
+	} else {
+		if parentComment.UserID != userData.ID {
 			notification := models.Notification{
-				UserID:    parentReply.UserID,
+				UserID:    parentComment.UserID,
 				Content:   fmt.Sprintf("%s membalas komentar Anda: %s", userData.Username, reply.Content),
 				ForumID:   parentComment.ForumID,
 				CommentID: &parentComment.ID,
@@ -86,16 +100,6 @@ func ReplyComment(c *gin.Context) {
 			}
 			database.DB.Create(&notification)
 		}
-	} else {
-		notification := models.Notification{
-			UserID:    parentComment.UserID,
-			Content:   fmt.Sprintf("%s membalas komentar Anda: %s", userData.Username, reply.Content),
-			ForumID:   parentComment.ForumID,
-			CommentID: &parentComment.ID,
-			ReplyID:   &reply.ID,
-			CreatedAt: time.Now(),
-		}
-		database.DB.Create(&notification)
 	}
 
 	if err := database.DB.Preload("User").First(&reply, reply.ID).Error; err != nil {

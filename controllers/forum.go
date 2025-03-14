@@ -263,7 +263,6 @@ func GetForumByID(c *gin.Context) {
 		return
 	}
 
-	// Cek apakah user sudah like forum ini
 	var like models.Like
 	liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
 
@@ -305,7 +304,6 @@ func GetForumByID(c *gin.Context) {
 		})
 	}
 
-	// Menyusun data forum
 	response := gin.H{
 		"id":            forum.ID,
 		"title":         forum.Title,

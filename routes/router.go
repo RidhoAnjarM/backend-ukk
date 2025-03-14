@@ -14,7 +14,7 @@ func SetupRouter(r *gin.Engine) {
 		api.POST("/login", controllers.Login)
 
 		api.GET("/users", controllers.GetAllUsers)
-		api.GET("/users/:id", controllers.GetUserByID)
+		api.GET("/users/:id", middlewares.AuthMiddleware(), controllers.GetUserByID)
 		api.PUT("/users/:id", controllers.UpdateUser)
 		api.DELETE("/users/:id", controllers.DeleteUser)
 		api.GET("/profile", middlewares.AuthMiddleware(), controllers.GetUsername)
