@@ -14,6 +14,7 @@ func SetupRouter(r *gin.Engine) {
 		api.POST("/login", controllers.Login)
 
 		api.GET("/users", controllers.GetAllUsers)
+		api.GET("/users-stats", controllers.GetUserStats)
 		api.GET("/users/:id", middlewares.AuthMiddleware(), controllers.GetUserByID)
 		api.PUT("/users/:id", controllers.UpdateUser)
 		api.DELETE("/users/:id", controllers.DeleteUser)
@@ -24,6 +25,7 @@ func SetupRouter(r *gin.Engine) {
 			report.GET("/akun", controllers.GetPendingReports) 
 			report.POST("/akun/review", middlewares.AuthMiddleware(), controllers.ReviewReport)
 			report.GET("/forum", controllers.GetPendingForumReports)
+			report.DELETE("/forum/:id", middlewares.AuthMiddleware(), controllers.DeleteReport) // Bukan "/forum" saja
 			
 			report.POST("/akun", middlewares.AuthMiddleware(), controllers.ReportUser)
 			report.POST("/forum", middlewares.AuthMiddleware(), controllers.ReportForumPost)
@@ -48,6 +50,7 @@ func SetupRouter(r *gin.Engine) {
 			forum.GET("/:id", middlewares.AuthMiddleware(), controllers.GetForumByID)
 			forum.PUT("/:id", middlewares.AuthMiddleware(), controllers.UpdateForum)
 			forum.DELETE("/:id", middlewares.AuthMiddleware(), controllers.DeleteForum)
+			forum.GET("/stats", controllers.GetForumStats)
 		}
 
 		comment := api.Group("/comment")

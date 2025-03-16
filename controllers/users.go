@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -123,6 +124,38 @@ func GetAllUsers(c *gin.Context) {
 
 	var response []gin.H
 	for _, user := range users {
+		// Jika pengguna sedang di-suspend dan SuspendUntil tidak null
+		if user.Status == "suspended" && user.SuspendUntil != nil {
+			// Hitung selisih waktu antara SuspendUntil dan waktu sekarang
+			timeRemaining := time.Until(*user.SuspendUntil)
+
+			// Jika waktu suspend sudah habis (timeRemaining <= 0)
+			if timeRemaining <= 0 {
+				// Update status pengguna menjadi active
+				user.Status = "active"
+				user.SuspendUntil = nil
+				user.SuspendDuration = 0
+
+				// Simpan perubahan ke database
+				database.DB.Save(&user)
+			} else {
+				// Hitung durasi suspend yang tersisa dalam hari
+				user.SuspendDuration = int(timeRemaining.Hours() / 24)
+				if user.SuspendDuration < 1 {
+					user.SuspendDuration = 1 // Minimal 1 hari jika kurang dari 24 jam
+				}
+			}
+		} else if user.Status == "active" {
+			// Jika status pengguna adalah active, pastikan suspend_duration adalah 0
+			if user.SuspendDuration != 0 {
+				user.SuspendDuration = 0
+				user.SuspendUntil = nil
+
+				// Simpan perubahan ke database
+				database.DB.Save(&user)
+			}
+		}
+
 		response = append(response, gin.H{
 			"id":               user.ID,
 			"name":             user.Name,
@@ -150,13 +183,11 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	// Update name
 	name := c.PostForm("name")
 	if name != "" {
 		user.Name = name
 	}
 
-	// Update username (check if already exists)
 	username := c.PostForm("username")
 	if username != "" && username != user.Username {
 		var existingUser models.User
@@ -167,7 +198,6 @@ func UpdateUser(c *gin.Context) {
 		user.Username = username
 	}
 
-	// Update password
 	password := c.PostForm("password")
 	if password != "" {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -178,19 +208,16 @@ func UpdateUser(c *gin.Context) {
 		user.Password = string(hashedPassword)
 	}
 
-	// Update role
 	role := c.PostForm("role")
 	if role != "" {
 		user.Role = role
 	}
 
-	// Update status
 	status := c.PostForm("status")
 	if status != "" {
 		user.Status = status
 	}
 
-	// Handle profile picture upload
 	file, err := c.FormFile("profile")
 	if err == nil {
 		uploadPath := fmt.Sprintf("./uploads/%s", file.Filename)
@@ -205,7 +232,6 @@ func UpdateUser(c *gin.Context) {
 		}
 	}
 
-	// Save changes
 	if err := database.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
@@ -260,4 +286,27 @@ func GetUsername(c *gin.Context) {
 		"username": user.Username,
 		"profile":  user.Profile,
 	})
+}
+
+func GetUserStats(c *gin.Context) {
+    var totalUsers int64
+    var weeklyUsers int64
+
+    if err := database.DB.Model(&models.User{}).Count(&totalUsers).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch total users"})
+        return
+    }
+
+    startOfWeek := time.Now().AddDate(0, 0, -int(time.Now().Weekday())+1).Truncate(24 * time.Hour) // Senin minggu ini
+    if err := database.DB.Model(&models.User{}).
+        Where("created_at >= ?", startOfWeek).
+        Count(&weeklyUsers).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch weekly users"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "total_users":   totalUsers,
+        "weekly_users":  weeklyUsers,
+    })
 }

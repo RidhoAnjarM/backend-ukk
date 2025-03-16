@@ -476,3 +476,28 @@ func DeleteForum(c *gin.Context) {
 	// Respons sukses
 	c.JSON(http.StatusOK, gin.H{"message": "Forum deleted successfully"})
 }
+
+func GetForumStats(c *gin.Context) {
+    var totalForums int64
+    var weeklyForums int64
+
+    // Total semua forum
+    if err := database.DB.Model(&models.Forum{}).Count(&totalForums).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch total forums"})
+        return
+    }
+
+    // Total forum yang dibuat minggu ini (mulai dari Senin)
+    startOfWeek := time.Now().AddDate(0, 0, -int(time.Now().Weekday())+1).Truncate(24 * time.Hour)
+    if err := database.DB.Model(&models.Forum{}).
+        Where("created_at >= ?", startOfWeek).
+        Count(&weeklyForums).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch weekly forums"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "total_forums":  totalForums,
+        "weekly_forums": weeklyForums,
+    })
+}

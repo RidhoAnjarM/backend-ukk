@@ -12,21 +12,18 @@ import (
 )
 
 func CheckExistingReport(c *gin.Context) {
-	// Ambil ID user dari token
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Ambil ID user yang dilaporkan dari query
 	reportedID := c.Query("reported_id")
 	if reportedID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Reported ID diperlukan"})
 		return
 	}
 
-	// Cek apakah laporan dengan status 'pending' sudah ada
 	var existingReport models.Report
 	if err := database.DB.Where("reporter_id = ? AND reported_id = ? AND status = 'pending'", userID, reportedID).First(&existingReport).Error; err == nil {
 		c.JSON(http.StatusOK, gin.H{"exists": true})
@@ -37,7 +34,6 @@ func CheckExistingReport(c *gin.Context) {
 }
 
 func ReportUser(c *gin.Context) {
-	// Ambil ID user dari token
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -51,26 +47,22 @@ func ReportUser(c *gin.Context) {
 		return
 	}
 
-	// Jika alasan kosong, isi default "Melanggar aturan komunitas"
 	if strings.TrimSpace(req.Reason) == "" {
 		req.Reason = "Melanggar aturan komunitas"
 	}
 
-	// Periksa apakah user yang dilaporkan ada
 	var reportedUser models.User
 	if err := database.DB.First(&reportedUser, req.ReportedID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User yang dilaporkan tidak ditemukan"})
 		return
 	}
 
-	// Cek apakah sudah ada laporan pending terhadap user yang sama
 	var existingReport models.Report
 	if err := database.DB.Where("reporter_id = ? AND reported_id = ? AND status = 'pending'", userID, req.ReportedID).First(&existingReport).Error; err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Laporan terhadap user ini sudah ada dan sedang diproses"})
 		return
 	}
 
-	// Simpan laporan baru
 	report := models.Report{
 		ReporterID: userID.(uint),
 		ReportedID: req.ReportedID,
@@ -92,13 +84,11 @@ func ReportUser(c *gin.Context) {
 func GetPendingReports(c *gin.Context) {
 	var reports []models.Report
 
-	// Preload data Reported User
 	if err := database.DB.Preload("ReportedUser").Where("status = ?", "pending").Find(&reports).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reports"})
 		return
 	}
 
-	// Format response dengan data lengkap
 	type ReportResponse struct {
 		ID           uint        `json:"id"`
 		ReporterID   uint        `json:"reporter_id"`
@@ -181,21 +171,18 @@ func ReviewReport(c *gin.Context) {
 
 
 func CheckExistingForumReport(c *gin.Context) {
-	// Ambil ID user dari token
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	// Ambil ID forum dari query
 	forumID := c.Query("forum_id")
 	if forumID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Forum ID diperlukan"})
 		return
 	}
 
-	// Cek apakah laporan dengan status 'pending' sudah ada
 	var existingReport models.ForumReport
 	if err := database.DB.Where("reporter_id = ? AND forum_id = ? AND status = 'pending'", userID, forumID).First(&existingReport).Error; err == nil {
 		c.JSON(http.StatusOK, gin.H{"exists": true})
@@ -206,7 +193,6 @@ func CheckExistingForumReport(c *gin.Context) {
 }
 
 func ReportForumPost(c *gin.Context) {
-	// Ambil ID user dari token
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -239,7 +225,6 @@ func ReportForumPost(c *gin.Context) {
 		return
 	}
 
-	// Simpan laporan baru
 	report := models.ForumReport{
 		ReporterID: userID.(uint),
 		ForumID:    req.ForumID,
@@ -262,13 +247,11 @@ func ReportForumPost(c *gin.Context) {
 func GetPendingForumReports(c *gin.Context) {
 	var reports []models.ForumReport
 
-	// Preload data Forum dan User dari Forum
 	if err := database.DB.Preload("Forum.User").Where("status = ?", "pending").Find(&reports).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forum reports"})
 		return
 	}
 
-	// Format response dengan data lengkap
 	type ForumReportResponse struct {
 		ID         uint         `json:"id"`
 		ReporterID uint         `json:"reporter_id"`
@@ -281,14 +264,11 @@ func GetPendingForumReports(c *gin.Context) {
 
 	var response []ForumReportResponse
 	for _, report := range reports {
-		// Cek apakah forum masih ada
 		if report.Forum.ID == 0 {
-			// Hapus report jika forumnya sudah tidak ada
 			database.DB.Delete(&report)
 			continue
 		}
 
-		// Tambahkan ke response jika forum valid
 		response = append(response, ForumReportResponse{
 			ID:         report.ID,
 			ReporterID: report.ReporterID,
@@ -301,4 +281,24 @@ func GetPendingForumReports(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func DeleteReport(c *gin.Context) {
+	reportID := c.Param("id")
+
+	var report models.ForumReport
+	if err := database.DB.First(&report, reportID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Laporan tidak ditemukan"})
+		return
+	}
+
+	if err := database.DB.Delete(&report).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menghapus laporan"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Laporan berhasil dihapus",
+		"report":  report,
+	})
 }
