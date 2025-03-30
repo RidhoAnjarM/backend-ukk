@@ -1,16 +1,18 @@
 package models
 
-import "time"
+import (
+	"time"
+	"encoding/json"
+)
 
 type Forum struct {
 	ID           uint      `gorm:"primarykey" json:"id"`
 	Title        string    `json:"title"`
 	Description  string    `json:"description"`
 	Photo        string    `json:"photo"`
+	Photos       json.RawMessage `gorm:"type:json" json:"photos"`
 	UserID       uint      `json:"user_id"`
 	User         User      `json:"user" gorm:"foreignKey:UserID;references:ID"`
-	CategoryID   *uint     `json:"category_id"`
-	Category     Category  `json:"category" gorm:"foreignKey:CategoryID"`
 	Comments     []Comment `json:"comments" gorm:"foreignKey:ForumID"`
 	Tags         []Tag     `json:"tags" gorm:"many2many:forum_tags;"`
 	LikesCount   int64     `json:"likes_count"`
@@ -19,10 +21,10 @@ type Forum struct {
 }
 
 type Tag struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	UsageCount int    `json:"usage_count"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID         int       `json:"id"`
+	Name       string    `json:"name"`
+	UsageCount int       `json:"usage_count"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type User struct {
@@ -40,13 +42,6 @@ type User struct {
 	CreatedAt       time.Time      `json:"created_at"`
 }
 
-type Category struct {
-	ID         uint   `gorm:"primarykey" json:"id"`
-	Name       string `json:"name"`
-	Photo      string `json:"photo"`
-	UsageCount int    `json:"usage_count"`
-	CreatedAt       time.Time      `json:"created_at"`
-}
 
 type Notification struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -56,10 +51,10 @@ type Notification struct {
 	Content   string    `json:"content"`
 	IsRead    bool      `json:"is_read"`
 	ForumID   uint      `json:"forum_id"`
-	CreatedAt time.Time `json:"created_at"`
 	Comment   *Comment  `json:"comment,omitempty" gorm:"foreignKey:CommentID;references:ID"`
 	Reply     *Reply    `json:"reply,omitempty" gorm:"foreignKey:ReplyID;references:ID"`
 	Forum     *Forum    `json:"forum,omitempty" gorm:"foreignKey:ForumID;references:ID"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Comment struct {
@@ -71,8 +66,8 @@ type Comment struct {
 	ParentID     *uint     `json:"parent_id"`
 	Parent       *Comment  `json:"parent,omitempty" gorm:"foreignKey:ParentID"`
 	Replies      []Reply   `json:"replies,omitempty" gorm:"foreignKey:CommentID"`
-	CreatedAt    time.Time `json:"created_at"`
 	RelativeTime string    `gorm:"-" json:"relative_time"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Reply struct {
@@ -99,8 +94,8 @@ type Report struct {
 	ReportedID   uint      `json:"reported_id"`
 	Reason       string    `json:"reason"`
 	Status       string    `json:"status"`
-	CreatedAt    time.Time `json:"created_at"`
 	ReportedUser User      `gorm:"foreignKey:ReportedID" json:"reported_user"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type ForumReport struct {
@@ -109,6 +104,6 @@ type ForumReport struct {
 	ForumID    uint      `json:"forum_id"`
 	Reason     string    `json:"reason"`
 	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
 	Forum      Forum     `gorm:"foreignKey:ForumID" json:"forum"`
+	CreatedAt  time.Time `json:"created_at"`
 }

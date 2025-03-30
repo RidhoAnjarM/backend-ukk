@@ -56,11 +56,13 @@ func GetNotifications(c *gin.Context) {
 			notificationData["forum_id"] = notif.Forum.ID
 			notificationData["forum_title"] = notif.Forum.Title
 			notificationData["photo"] = notif.Forum.Photo
+			notificationData["photos"] = notif.Forum.Photos
 			notificationData["forum_relative_time"] = utils.TimeAgo(notif.Forum.CreatedAt)
 		} else {
 			notificationData["forum_id"] = nil
 			notificationData["forum_title"] = ""
 			notificationData["photo"] = ""
+			notificationData["photos"] = ""
 			notificationData["forum_relative_time"] = ""
 		}
 

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -34,51 +35,69 @@ func CheckExistingReport(c *gin.Context) {
 }
 
 func ReportUser(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+    userID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
 
-	var req models.Report
+    var req models.Report
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
+    // Cek jika user mencoba mereport dirinya sendiri
+    reporterID := userID.(uint)
+    if reporterID == req.ReportedID {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Anda tidak dapat melaporkan diri sendiri"})
+        return
+    }
 
-	if strings.TrimSpace(req.Reason) == "" {
-		req.Reason = "Melanggar aturan komunitas"
-	}
+    if strings.TrimSpace(req.Reason) == "" {
+        req.Reason = "Melanggar aturan komunitas"
+    }
 
-	var reportedUser models.User
-	if err := database.DB.First(&reportedUser, req.ReportedID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User yang dilaporkan tidak ditemukan"})
-		return
-	}
+    var reportedUser models.User
+    if err := database.DB.First(&reportedUser, req.ReportedID).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "User yang dilaporkan tidak ditemukan"})
+        return
+    }
 
-	var existingReport models.Report
-	if err := database.DB.Where("reporter_id = ? AND reported_id = ? AND status = 'pending'", userID, req.ReportedID).First(&existingReport).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Laporan terhadap user ini sudah ada dan sedang diproses"})
-		return
-	}
+    var existingReport models.Report
+    if err := database.DB.Where("reporter_id = ? AND reported_id = ? AND status = 'pending'", reporterID, req.ReportedID).First(&existingReport).Error; err == nil {
+        c.JSON(http.StatusConflict, gin.H{"error": "Laporan terhadap user ini sudah ada dan sedang diproses"})
+        return
+    }
 
-	report := models.Report{
-		ReporterID: userID.(uint),
-		ReportedID: req.ReportedID,
-		Reason:     req.Reason,
-		Status:     "pending",
-	}
+    report := models.Report{
+        ReporterID: reporterID,
+        ReportedID: req.ReportedID,
+        Reason:     req.Reason,
+        Status:     "pending",
+    }
 
-	if err := database.DB.Create(&report).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengirim laporan"})
-		return
-	}
+    if err := database.DB.Create(&report).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengirim laporan"})
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Laporan berhasil dikirim dan menunggu review admin.",
-		"report":  report,
-	})
+    // Buat notifikasi untuk reporter
+    notification := models.Notification{
+        UserID:  reporterID,
+        Content: "Laporan Anda terhadap @" + reportedUser.Username + " telah berhasil dikirim dan sedang diproses oleh admin.",
+        IsRead:  false,
+        CreatedAt: time.Now(),
+    }
+    if err := database.DB.Create(&notification).Error; err != nil {
+        // Log error tapi tidak gagalakan response utama
+        log.Printf("Gagal membuat notifikasi: %v", err)
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Laporan berhasil dikirim dan menunggu review admin.",
+        "report":  report,
+    })
 }
 
 func GetPendingReports(c *gin.Context) {
@@ -169,7 +188,6 @@ func ReviewReport(c *gin.Context) {
 	})
 }
 
-
 func CheckExistingForumReport(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -193,55 +211,74 @@ func CheckExistingForumReport(c *gin.Context) {
 }
 
 func ReportForumPost(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+    userID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
 
-	var req struct {
-		ForumID uint   `json:"forum_id"`
-		Reason  string `json:"reason"`
-	}
+    var req struct {
+        ForumID uint   `json:"forum_id"`
+        Reason  string `json:"reason"`
+    }
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+        return
+    }
 
-	if strings.TrimSpace(req.Reason) == "" {
-		req.Reason = "Melanggar aturan komunitas"
-	}
+    var forum models.Forum
+    if err := database.DB.First(&forum, req.ForumID).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Forum post tidak ditemukan"})
+        return
+    }
 
-	var forum models.Forum
-	if err := database.DB.First(&forum, req.ForumID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Forum post tidak ditemukan"})
-		return
-	}
+    // Cek jika user mencoba mereport postingannya sendiri
+    reporterID := userID.(uint)
+    if forum.UserID == reporterID {
+        c.JSON(http.StatusForbidden, gin.H{"error": "Anda tidak dapat melaporkan postingan Anda sendiri"})
+        return
+    }
 
-	var existingReport models.ForumReport
-	if err := database.DB.Where("reporter_id = ? AND forum_id = ? AND status = 'pending'", userID, req.ForumID).First(&existingReport).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Laporan terhadap postingan ini sudah ada dan sedang diproses"})
-		return
-	}
+    if strings.TrimSpace(req.Reason) == "" {
+        req.Reason = "Melanggar aturan komunitas"
+    }
 
-	report := models.ForumReport{
-		ReporterID: userID.(uint),
-		ForumID:    req.ForumID,
-		Reason:     req.Reason,
-		Status:     "pending",
-		CreatedAt:  time.Now(),
-	}
+    var existingReport models.ForumReport
+    if err := database.DB.Where("reporter_id = ? AND forum_id = ? AND status = 'pending'", reporterID, req.ForumID).First(&existingReport).Error; err == nil {
+        c.JSON(http.StatusConflict, gin.H{"error": "Laporan terhadap postingan ini sudah ada dan sedang diproses"})
+        return
+    }
 
-	if err := database.DB.Create(&report).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengirim laporan"})
-		return
-	}
+    report := models.ForumReport{
+        ReporterID: reporterID,
+        ForumID:    req.ForumID,
+        Reason:     req.Reason,
+        Status:     "pending",
+        CreatedAt:  time.Now(),
+    }
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Laporan berhasil dikirim dan menunggu review admin.",
-		"report":  report,
-	})
+    if err := database.DB.Create(&report).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengirim laporan"})
+        return
+    }
+
+    // Buat notifikasi untuk reporter
+    notification := models.Notification{
+        UserID:    reporterID,
+        ForumID:   req.ForumID, // Gunakan ForumID dari request
+        Content:   "Laporan Anda terhadap postingan '" + forum.Title + "' telah berhasil dikirim dan sedang diproses oleh admin.",
+        IsRead:    false,
+        CreatedAt: time.Now(),
+    }
+    if err := database.DB.Create(&notification).Error; err != nil {
+        log.Printf("Gagal membuat notifikasi: %v", err)
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Laporan berhasil dikirim dan menunggu review admin.",
+        "report":  report,
+    })
 }
 
 func GetPendingForumReports(c *gin.Context) {

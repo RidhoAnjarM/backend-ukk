@@ -29,7 +29,7 @@ func GetProfile(c *gin.Context) {
 	}
 
 	var userWithForums models.User
-	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&userWithForums, userData.ID).Error; err != nil {
+	if err := database.DB.Preload("Forums.User").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&userWithForums, userData.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user data", "details": err.Error()})
 		return
 	}
@@ -80,12 +80,11 @@ func GetProfile(c *gin.Context) {
 			"title":         forum.Title,
 			"description":   forum.Description,
 			"photo":         forum.Photo,
+			"photos":        forum.Photos,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
 			"name":          forum.User.Name,
 			"profile":       forum.User.Profile,
-			"category_id":   forum.CategoryID,
-			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
 			"like":          forum.LikesCount,
 			"liked":         liked,

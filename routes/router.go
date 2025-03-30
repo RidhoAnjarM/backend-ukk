@@ -25,22 +25,13 @@ func SetupRouter(r *gin.Engine) {
 			report.GET("/akun", controllers.GetPendingReports) 
 			report.POST("/akun/review", middlewares.AuthMiddleware(), controllers.ReviewReport)
 			report.GET("/forum", controllers.GetPendingForumReports)
-			report.DELETE("/forum/:id", middlewares.AuthMiddleware(), controllers.DeleteReport) // Bukan "/forum" saja
+			report.DELETE("/forum/:id", middlewares.AuthMiddleware(), controllers.DeleteReport) 
 			
 			report.POST("/akun", middlewares.AuthMiddleware(), controllers.ReportUser)
 			report.POST("/forum", middlewares.AuthMiddleware(), controllers.ReportForumPost)
 
 			report.GET("/akun/check", middlewares.AuthMiddleware(), controllers.CheckExistingReport)
 			report.GET("/forum/check", middlewares.AuthMiddleware(), controllers.CheckExistingForumReport)
-		}
-
-		category := api.Group("/category")
-		{
-			category.POST("/", controllers.CreateCategory)
-			category.GET("/", controllers.GetCategories)
-			category.GET("/:id", controllers.GetCategoryByID)
-			category.PUT("/:id", controllers.UpdateCategory)
-			category.DELETE("/:id", controllers.DeleteCategory)
 		}
 
 		forum := api.Group("/forum")
@@ -51,6 +42,9 @@ func SetupRouter(r *gin.Engine) {
 			forum.PUT("/:id", middlewares.AuthMiddleware(), controllers.UpdateForum)
 			forum.DELETE("/:id", middlewares.AuthMiddleware(), controllers.DeleteForum)
 			forum.GET("/stats", controllers.GetForumStats)
+
+			forum.GET("/nologin", controllers.GetAllForumsNoLogin)
+			forum.GET("/nologin/:id", controllers.GetForumByIDNoLogin)
 		}
 
 		comment := api.Group("/comment")
@@ -87,8 +81,6 @@ func SetupRouter(r *gin.Engine) {
 		populer := api.Group("/populer")
 		{
 			populer.GET("/tag", controllers.GetPopularTags)
-			populer.GET("/category", controllers.GetPopularCategories)
-
 		}
 
 		like := api.Group("/like")

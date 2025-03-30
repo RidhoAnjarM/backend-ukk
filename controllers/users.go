@@ -30,7 +30,7 @@ func GetUserByID(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := database.DB.Preload("Forums.User").Preload("Forums.Category").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&user, id).Error; err != nil {
+	if err := database.DB.Preload("Forums.User").Preload("Forums.Comments.User").Preload("Forums.Comments.Replies.User").Preload("Forums.Tags").First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
@@ -81,12 +81,11 @@ func GetUserByID(c *gin.Context) {
 			"title":         forum.Title,
 			"description":   forum.Description,
 			"photo":         forum.Photo,
+			"photos":        forum.Photos,
 			"user_id":       forum.UserID,
 			"username":      forum.User.Username,
 			"name":          forum.User.Name,
 			"profile":       forum.User.Profile,
-			"category_id":   forum.CategoryID,
-			"category_name": forum.Category.Name,
 			"relative_time": utils.TimeAgo(forum.CreatedAt),
 			"like":          forum.LikesCount,
 			"liked":         liked,
@@ -124,34 +123,26 @@ func GetAllUsers(c *gin.Context) {
 
 	var response []gin.H
 	for _, user := range users {
-		// Jika pengguna sedang di-suspend dan SuspendUntil tidak null
 		if user.Status == "suspended" && user.SuspendUntil != nil {
-			// Hitung selisih waktu antara SuspendUntil dan waktu sekarang
 			timeRemaining := time.Until(*user.SuspendUntil)
 
-			// Jika waktu suspend sudah habis (timeRemaining <= 0)
 			if timeRemaining <= 0 {
-				// Update status pengguna menjadi active
 				user.Status = "active"
 				user.SuspendUntil = nil
 				user.SuspendDuration = 0
 
-				// Simpan perubahan ke database
 				database.DB.Save(&user)
 			} else {
-				// Hitung durasi suspend yang tersisa dalam hari
 				user.SuspendDuration = int(timeRemaining.Hours() / 24)
 				if user.SuspendDuration < 1 {
-					user.SuspendDuration = 1 // Minimal 1 hari jika kurang dari 24 jam
+					user.SuspendDuration = 1 
 				}
 			}
 		} else if user.Status == "active" {
-			// Jika status pengguna adalah active, pastikan suspend_duration adalah 0
 			if user.SuspendDuration != 0 {
 				user.SuspendDuration = 0
 				user.SuspendUntil = nil
 
-				// Simpan perubahan ke database
 				database.DB.Save(&user)
 			}
 		}
@@ -165,6 +156,7 @@ func GetAllUsers(c *gin.Context) {
 			"role":             user.Role,
 			"suspend_until":    user.SuspendUntil,
 			"suspend_duration": user.SuspendDuration,
+			"created_at":       user.CreatedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 
