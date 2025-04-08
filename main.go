@@ -6,15 +6,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	"backend/controllers"
 	"backend/database"
 	"backend/routes"
-	"backend/controllers"
 )
 
 func main() {
 	r := gin.Default()
-	
-	controllers.ScheduleWeeklyTagReset() 
 
 	r.Static("/uploads", "./uploads")
 
@@ -25,9 +23,13 @@ func main() {
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
-	}))	
+	}))
 
 	database.ConnectDatabase()
+
+	// Cek sekali saat start dan jalankan pengecekan berkala
+	controllers.CheckAndResetTags()
+	controllers.CheckAndResetTagsPeriodically()
 
 	routes.SetupRouter(r)
 

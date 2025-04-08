@@ -23,8 +23,13 @@ type Forum struct {
 type Tag struct {
 	ID         int       `json:"id"`
 	Name       string    `json:"name"`
-	UsageCount int       `json:"usage_count"`
+	UsageCount int       `json:"usage_count" gorm:"default:0"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+type ResetLog struct {
+    ID         uint      `gorm:"primaryKey"`
+    LastResetAt time.Time `gorm:"default:current_timestamp"`
 }
 
 type User struct {
@@ -37,11 +42,11 @@ type User struct {
 	Status          string         `form:"status" json:"status"`
 	SuspendUntil    *time.Time     `form:"suspend_until" json:"suspend_until,omitempty"`
 	SuspendDuration int            `json:"suspend_duration"`
+	SuspendCount    int            `json:"suspend_count"` 
 	Notifications   []Notification `json:"notifications" gorm:"foreignKey:UserID"`
 	Forums          []Forum        `json:"forums" gorm:"foreignKey:UserID"`
 	CreatedAt       time.Time      `json:"created_at"`
 }
-
 
 type Notification struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -66,6 +71,7 @@ type Comment struct {
 	ParentID     *uint     `json:"parent_id"`
 	Parent       *Comment  `json:"parent,omitempty" gorm:"foreignKey:ParentID"`
 	Replies      []Reply   `json:"replies,omitempty" gorm:"foreignKey:CommentID"`
+	ImageURL     string    `json:"image_url,omitempty" gorm:"default:null"`
 	RelativeTime string    `gorm:"-" json:"relative_time"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -77,6 +83,7 @@ type Reply struct {
 	ParentReplyID *uint     `json:"parent_reply_id,omitempty"`
 	UserID        uint      `json:"user_id"`
 	User          User      `json:"user" gorm:"foreignKey:UserID;references:ID"`
+	ImageURL     string    `json:"image_url,omitempty" gorm:"default:null"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 

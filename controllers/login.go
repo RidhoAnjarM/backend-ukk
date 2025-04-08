@@ -91,13 +91,21 @@ func Register(c *gin.Context) {
 		input.Status = "active"
 	}
 
+	// Validasi field wajib
 	if input.Username == "" || input.Password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username dan password harus diisi"})
 		return
 	}
 
+	// Validasi panjang password minimal 6 karakter
+	if len(input.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password harus minimal 6 karakter"})
+		return
+	}
+
 	if input.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Nama harus diisi"})
+		return // Tambahkan return agar tidak lanjut jika nama kosong
 	}
 
 	var existingUser models.User

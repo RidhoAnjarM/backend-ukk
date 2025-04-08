@@ -2,11 +2,14 @@ package controllers
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"backend/database"
 	"backend/models"
@@ -68,6 +71,24 @@ func ReplyComment(c *gin.Context) {
 		return
 	}
 
+	// Handle upload gambar (opsional)
+	file, err := c.FormFile("image")
+	if err == nil {
+		uploadDir := "./uploads/replies"
+		if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
+			os.MkdirAll(uploadDir, os.ModePerm)
+		}
+
+		filename := fmt.Sprintf("reply-%d-%d-%s", userData.ID, time.Now().Unix(), file.Filename)
+		uploadPath := filepath.Join(uploadDir, filename)
+
+		if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+			return
+		}
+		reply.ImageURL = fmt.Sprintf("/uploads/replies/%s", filename)
+	}
+
 	if err := database.DB.Create(&reply).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add reply", "details": err.Error()})
 		return
@@ -114,6 +135,7 @@ func ReplyComment(c *gin.Context) {
 		"username":        reply.User.Username,
 		"name":            reply.User.Name,
 		"profile":         reply.User.Profile,
+		"image_url":       reply.ImageURL, // Tambah image_url di response
 		"parent_id":       reply.CommentID,
 		"parent_reply_id": reply.ParentReplyID,
 		"relative_time":   utils.TimeAgo(reply.CreatedAt),

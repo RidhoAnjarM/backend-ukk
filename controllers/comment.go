@@ -3,6 +3,8 @@ package controllers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -44,6 +46,24 @@ func AddComment(c *gin.Context) {
 		return
 	}
 
+	// Handle upload gambar (opsional)
+	file, err := c.FormFile("image")
+	if err == nil {
+		uploadDir := "./uploads/comments"
+		if _, err := os.Stat(uploadDir); os.IsNotExist(err) {
+			os.MkdirAll(uploadDir, os.ModePerm)
+		}
+
+		filename := fmt.Sprintf("comment-%d-%d-%s", userData.ID, time.Now().Unix(), file.Filename)
+		uploadPath := filepath.Join(uploadDir, filename)
+
+		if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload image"})
+			return
+		}
+		comment.ImageURL = fmt.Sprintf("/uploads/comments/%s", filename)
+	}
+
 	if err := database.DB.Create(&comment).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add comment", "details": err.Error()})
 		return
@@ -59,6 +79,7 @@ func AddComment(c *gin.Context) {
 		"username":      comment.User.Username,
 		"name":          comment.User.Name,
 		"profile":       comment.User.Profile,
+		"image_url":     comment.ImageURL, // Tambah image_url di response
 		"relative_time": utils.TimeAgo(comment.CreatedAt),
 	}
 
@@ -74,7 +95,7 @@ func AddComment(c *gin.Context) {
 					CommentID: &comment.ID,
 					CreatedAt: time.Now(),
 				}
-				database.DB.Create(&notification)
+				database.DB.Create(&notification) // Fix typo "¬ification" jadi "&notification"
 			}
 		}
 	}
@@ -102,6 +123,7 @@ func GetAllComments(c *gin.Context) {
 				"content":       reply.Content,
 				"user_id":       reply.UserID,
 				"username":      reply.User.Username,
+				"image_url":     reply.ImageURL,
 				"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
 				"relative_time": utils.TimeAgo(reply.CreatedAt),
 			})
@@ -113,6 +135,7 @@ func GetAllComments(c *gin.Context) {
 			"forum_id":      comment.ForumID,
 			"user_id":       comment.UserID,
 			"username":      comment.User.Username,
+			"image_url":     comment.ImageURL,
 			"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
 			"relative_time": utils.TimeAgo(comment.CreatedAt),
 			"replies":       replies,
@@ -138,6 +161,7 @@ func GetCommentByID(c *gin.Context) {
 			"content":       reply.Content,
 			"user_id":       reply.UserID,
 			"username":      reply.User.Username,
+			"image_url":     reply.ImageURL,
 			"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
 			"relative_time": utils.TimeAgo(reply.CreatedAt),
 		})
@@ -149,6 +173,7 @@ func GetCommentByID(c *gin.Context) {
 		"forum_id":      comment.ForumID,
 		"user_id":       comment.UserID,
 		"username":      comment.User.Username,
+		"image_url":     comment.ImageURL,
 		"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
 		"relative_time": utils.TimeAgo(comment.CreatedAt),
 		"replies":       replies,

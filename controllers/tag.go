@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetAllTags fetches tags from the database based on a search query
+
 func GetAllTags(search string) ([]models.Tag, error) {
 	var tags []models.Tag
 	query := database.DB.Where("name ILIKE ?", search+"%").Limit(5).Find(&tags)
@@ -20,7 +20,7 @@ func GetAllTags(search string) ([]models.Tag, error) {
 	return tags, nil
 }
 
-// CreateTag inserts a new tag into the database
+
 func CreateTag(name string) (models.Tag, error) {
 	newTag := models.Tag{Name: name}
 	query := database.DB.Create(&newTag)
@@ -30,7 +30,7 @@ func CreateTag(name string) (models.Tag, error) {
 	return newTag, nil
 }
 
-// TagExists checks if a tag already exists in the database
+
 func TagExists(name string) (bool, error) {
 	var count int64
 	query := database.DB.Model(&models.Tag{}).Where("name = ?", name).Count(&count)
@@ -40,7 +40,7 @@ func TagExists(name string) (bool, error) {
 	return count > 0, nil
 }
 
-// Handler untuk GET /api/tags
+
 func GetTags(c *gin.Context) {
 	search := c.Query("q")
 
@@ -59,7 +59,7 @@ func GetTags(c *gin.Context) {
 	c.JSON(http.StatusOK, tags)
 }
 
-// Handler untuk POST /api/tags
+
 func CreateTagHandler(c *gin.Context) {
 	var request struct {
 		Name string `json:"name"`
@@ -111,30 +111,86 @@ func GetTagsAll(c *gin.Context) {
 }
 
 func GetPopularTags(c *gin.Context) {
-	var tags []models.Tag
+    var tags []models.Tag
+    if err := database.DB.
+        Select("id, name, COALESCE(usage_count, 0) AS usage_count, created_at").
+        Where("usage_count > 0").  
+        Order("usage_count DESC").
+        Limit(10).
+        Find(&tags).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch popular tags"})
+        return
+    }
 
-	if err := database.DB.
-		Select("id, name, COALESCE(usage_count, 0) AS usage_count").
-		Order("usage_count DESC").
-		Limit(10).
-		Find(&tags).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch popular tags"})
-		return
-	}
+    if len(tags) == 0 {
+        c.JSON(http.StatusOK, gin.H{"message": "Tidak ada tag populer di minggu ini"})
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{"popular_tags": tags})
+    c.JSON(http.StatusOK, gin.H{"popular_tags": tags})
 }
 
 
 func ResetTagUsage() {
-	database.DB.Model(&models.Tag{}).Update("usage_count", 0)
+    log.Println("Running updated ResetTagUsage with Updates method")
+	result := database.DB.Exec("UPDATE tags SET usage_count = 0")
+    if result.Error != nil {
+        log.Println("Error resetting tag usage:", result.Error)
+        return
+    }
+    log.Printf("Successfully reset usage_count for %d tags", result.RowsAffected)
+
+    var resetLog models.ResetLog
+    if err := database.DB.First(&resetLog).Error; err != nil {
+        resetLog = models.ResetLog{LastResetAt: time.Now()}
+        database.DB.Create(&resetLog)
+    } else {
+        resetLog.LastResetAt = time.Now()
+        database.DB.Save(&resetLog)
+    }
+    log.Println("Reset time updated to:", resetLog.LastResetAt)
 }
 
-func ScheduleWeeklyTagReset() {
-	ticker := time.NewTicker(7 * 24 * time.Hour) 
-	go func() {
-		for range ticker.C {
-			ResetTagUsage()
-		}
-	}()
+// Fungsi untuk cek apakah perlu reset
+func ShouldReset(lastResetTime time.Time, interval time.Duration) bool {
+    return time.Since(lastResetTime) >= interval
+}
+
+// Fungsi untuk cek dan reset saat start
+func CheckAndResetTags() {
+    var resetLog models.ResetLog
+    interval := 7 * 24 * time.Hour 
+
+    if err := database.DB.First(&resetLog).Error; err != nil {
+        ResetTagUsage()
+        return
+    }
+
+    if ShouldReset(resetLog.LastResetAt, interval) {
+        ResetTagUsage()
+    } else {
+        log.Println("No reset needed yet. Last reset was at:", resetLog.LastResetAt)
+    }
+}
+
+func CheckAndResetTagsPeriodically() {
+    interval := 7 * 24 * time.Hour  
+    ticker := time.NewTicker(5 * time.Minute) 
+    go func() {
+        for range ticker.C {
+            var resetLog models.ResetLog
+            if err := database.DB.First(&resetLog).Error; err != nil {
+                ResetTagUsage()
+                continue
+            }
+            if ShouldReset(resetLog.LastResetAt, interval) {
+                ResetTagUsage()
+            }
+        }
+    }()
+}
+
+func ResetTagsManual(c *gin.Context) {
+    ResetTagUsage()
+    c.JSON(http.StatusOK, gin.H{"message": "Tag usage reset manually"})
 }

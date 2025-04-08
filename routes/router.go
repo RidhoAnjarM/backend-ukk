@@ -32,6 +32,8 @@ func SetupRouter(r *gin.Engine) {
 
 			report.GET("/akun/check", middlewares.AuthMiddleware(), controllers.CheckExistingReport)
 			report.GET("/forum/check", middlewares.AuthMiddleware(), controllers.CheckExistingForumReport)
+
+			report.POST("/forum/:id/handle", middlewares.AuthMiddleware(), controllers.HandleForumReport)
 		}
 
 		forum := api.Group("/forum")
@@ -76,6 +78,7 @@ func SetupRouter(r *gin.Engine) {
 			tags.POST("/", controllers.CreateTagHandler)
 			tags.GET("/", controllers.GetTags)
 			tags.GET("/all", controllers.GetTagsAll)
+			tags.GET("/reset", controllers.ResetTagsManual)
 		}
 
 		populer := api.Group("/populer")

@@ -138,7 +138,6 @@ func CreateForum(c *gin.Context) {
 		return
 	}
 
-	// Update tag usage count
 	for _, tag := range tags {
 		if err := tx.Model(&models.Tag{}).Where("id = ?", tag.ID).Update("usage_count", gorm.Expr("usage_count + 1")).Error; err != nil {
 			tx.Rollback()
@@ -151,7 +150,6 @@ func CreateForum(c *gin.Context) {
 
 	database.DB.Preload("User").Preload("Tags").First(&forum, forum.ID)
 
-	// Parse Photos kembali ke []string untuk response
 	var photosResponse []string
 	if err := json.Unmarshal(forum.Photos, &photosResponse); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unmarshal photos for response"})
@@ -162,7 +160,7 @@ func CreateForum(c *gin.Context) {
 		"id":            forum.ID,
 		"title":         forum.Title,
 		"description":   forum.Description,
-		"photos":        photosResponse, // Gunakan versi parsed
+		"photos":        photosResponse,  
 		"username":      forum.User.Username,
 		"name":          forum.User.Name,
 		"profile":       forum.User.Profile,
@@ -178,90 +176,103 @@ func CreateForum(c *gin.Context) {
 }
 
 func GetAllForums(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+    userID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+        return
+    }
 
-	var forums []models.Forum
-	if err := database.DB.Preload("User").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").Order("created_at desc").Find(&forums).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forums"})
-		return
-	}
+    var forums []models.Forum
+    if err := database.DB.Preload("User").Preload("Comments.User").Preload("Comments.Replies.User").Preload("Tags").Order("created_at desc").Find(&forums).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch forums"})
+        return
+    }
 
-	if len(forums) > 1 {
-		latestForum := forums[0]
-		remainingForums := forums[1:]
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		r.Shuffle(len(remainingForums), func(i, j int) {
-			remainingForums[i], remainingForums[j] = remainingForums[j], remainingForums[i]
-		})
-		forums = append([]models.Forum{latestForum}, remainingForums...)
-	}
+    if len(forums) > 1 {
+        latestForum := forums[0]
+        remainingForums := forums[1:]
+        r := rand.New(rand.NewSource(time.Now().UnixNano()))
+        r.Shuffle(len(remainingForums), func(i, j int) {
+            remainingForums[i], remainingForums[j] = remainingForums[j], remainingForums[i]
+        })
+        forums = append([]models.Forum{latestForum}, remainingForums...)
+    }
 
-	var response []gin.H
-	for _, forum := range forums {
-		var like models.Like
-		liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
+    var response []gin.H
+    for _, forum := range forums {
+        // Cek status suspend user
+        if forum.User.Status == "suspended" && forum.User.SuspendUntil != nil && time.Now().Before(*forum.User.SuspendUntil) {
+            continue // Skip forum ini kalo user-nya lagi disuspend
+        }
 
-		var comments []gin.H
-		for _, comment := range forum.Comments {
-			var replies []gin.H
-			for _, reply := range comment.Replies {
-				replies = append(replies, gin.H{
-					"id":            reply.ID,
-					"content":       reply.Content,
-					"user_id":       reply.UserID,
-					"username":      reply.User.Username,
-					"name":          reply.User.Name,
-					"profile":       reply.User.Profile,
-					"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
-					"relative_time": utils.TimeAgo(reply.CreatedAt),
-				})
-			}
+        // Update status user kalo suspend-nya udah selesai
+        if forum.User.Status == "suspended" && forum.User.SuspendUntil != nil && time.Now().After(*forum.User.SuspendUntil) {
+            forum.User.Status = "active"
+            forum.User.SuspendUntil = nil
+            forum.User.SuspendDuration = 0
+            database.DB.Save(&forum.User)
+        }
 
-			comments = append(comments, gin.H{
-				"id":            comment.ID,
-				"content":       comment.Content,
-				"user_id":       comment.UserID,
-				"username":      comment.User.Username,
-				"name":          comment.User.Name,
-				"profile":       comment.User.Profile,
-				"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
-				"relative_time": utils.TimeAgo(comment.CreatedAt),
-				"replies":       replies,
-			})
-		}
+        var like models.Like
+        liked := database.DB.Where("user_id = ? AND forum_id = ?", userID, forum.ID).First(&like).Error == nil
 
-		var tags []gin.H
-		for _, tag := range forum.Tags {
-			tags = append(tags, gin.H{
-				"id":   tag.ID,
-				"name": tag.Name,
-			})
-		}
+        var comments []gin.H
+        for _, comment := range forum.Comments {
+            var replies []gin.H
+            for _, reply := range comment.Replies {
+                replies = append(replies, gin.H{
+                    "id":            reply.ID,
+                    "content":       reply.Content,
+                    "user_id":       reply.UserID,
+                    "username":      reply.User.Username,
+                    "name":          reply.User.Name,
+                    "profile":       reply.User.Profile,
+                    "created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
+                    "relative_time": utils.TimeAgo(reply.CreatedAt),
+                })
+            }
 
-		response = append(response, gin.H{
-			"id":            forum.ID,
-			"title":         forum.Title,
-			"description":   forum.Description,
-			"photos":        forum.Photos,
-			"photo":         forum.Photo,
-			"user_id":       forum.UserID,
-			"username":      forum.User.Username,
-			"name":          forum.User.Name,
-			"profile":       forum.User.Profile,
-			"relative_time": utils.TimeAgo(forum.CreatedAt),
-			"like":          forum.LikesCount,
-			"liked":         liked,
-			"comments":      comments,
-			"tags":          tags,
-			"createAt":      forum.CreatedAt,
-		})
-	}
+            comments = append(comments, gin.H{
+                "id":            comment.ID,
+                "content":       comment.Content,
+                "user_id":       comment.UserID,
+                "username":      comment.User.Username,
+                "name":          comment.User.Name,
+                "profile":       comment.User.Profile,
+                "created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
+                "relative_time": utils.TimeAgo(comment.CreatedAt),
+                "replies":       replies,
+            })
+        }
 
-	c.JSON(http.StatusOK, response)
+        var tags []gin.H
+        for _, tag := range forum.Tags {
+            tags = append(tags, gin.H{
+                "id":   tag.ID,
+                "name": tag.Name,
+            })
+        }
+
+        response = append(response, gin.H{
+            "id":            forum.ID,
+            "title":         forum.Title,
+            "description":   forum.Description,
+            "photos":        forum.Photos,
+            "photo":         forum.Photo,
+            "user_id":       forum.UserID,
+            "username":      forum.User.Username,
+            "name":          forum.User.Name,
+            "profile":       forum.User.Profile,
+            "relative_time": utils.TimeAgo(forum.CreatedAt),
+            "like":          forum.LikesCount,
+            "liked":         liked,
+            "comments":      comments,
+            "tags":          tags,
+            "createAt":      forum.CreatedAt,
+        })
+    }
+
+    c.JSON(http.StatusOK, response)
 }
 
 func GetForumByID(c *gin.Context) {
@@ -297,6 +308,7 @@ func GetForumByID(c *gin.Context) {
 				"username":      reply.User.Username,
 				"profile":       reply.User.Profile,
 				"name":          reply.User.Name,
+				"image_url":     reply.ImageURL,
 				"created_at":    reply.CreatedAt.Format("2006-01-02 15:04:05"),
 				"relative_time": utils.TimeAgo(reply.CreatedAt),
 			})
@@ -310,6 +322,7 @@ func GetForumByID(c *gin.Context) {
 			"username":      comment.User.Username,
 			"name":          comment.User.Name,
 			"profile":       comment.User.Profile,
+			"image_url":     comment.ImageURL,
 			"created_at":    comment.CreatedAt.Format("2006-01-02 15:04:05"),
 			"relative_time": utils.TimeAgo(comment.CreatedAt),
 			"replies":       replies,
