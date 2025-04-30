@@ -5,6 +5,3 @@ coverage/
 .DS_Store
 *.log
 *.tmp
-
-go.mod
-go.sum
