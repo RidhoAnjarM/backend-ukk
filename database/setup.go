@@ -15,7 +15,7 @@ var DB *gorm.DB
 
 func ConnectDatabase() {
     // Load .env hanya untuk development lokal
-    if os.Getenv("RAILWAY_ENVIRONMENT") == "" {
+    if os.Getenv("FLY_APP_NAME") == "" && os.Getenv("RAILWAY_ENVIRONMENT") == "" {
         err := godotenv.Load()
         if err != nil {
             log.Println("Warning: Error loading .env file, relying on environment variables")
@@ -30,10 +30,15 @@ func ConnectDatabase() {
         dbUser := os.Getenv("DB_USER")
         dbPassword := os.Getenv("DB_PASSWORD")
         dbName := os.Getenv("DB_NAME")
-		dbPort := os.Getenv("DB_PORT")
+        dbPort := os.Getenv("DB_PORT")
         dbSslMode := os.Getenv("DB_SSLMODE")
         dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
             dbHost, dbUser, dbPassword, dbName, dbPort, dbSslMode)
+    }
+
+    // Validasi DSN
+    if dsn == "" {
+        log.Fatal("Error: DATABASE_URL or DB connection details are not set")
     }
 
     // Connect ke database
